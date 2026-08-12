@@ -195,7 +195,7 @@ class TestTemporalOrdering(unittest.TestCase):
         """Every outer fold: max(train_idx) < min(val_idx)."""
         from sklearn.model_selection import TimeSeriesSplit
         df = _make_minimal_df(n=100, seed=5)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
 
         outer_cv = TimeSeriesSplit(n_splits=N_OUTER_SPLITS)
         for fold_idx, (train_idx, val_idx) in enumerate(outer_cv.split(X_elig)):
@@ -208,7 +208,7 @@ class TestTemporalOrdering(unittest.TestCase):
         """Every inner fold inside tune_hyperparameters satisfies train < val."""
         from sklearn.model_selection import TimeSeriesSplit
         df = _make_minimal_df(n=100, seed=7)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
 
         outer_cv = TimeSeriesSplit(n_splits=N_OUTER_SPLITS)
         train_idx, _ = next(iter(outer_cv.split(X_elig)))
@@ -290,7 +290,7 @@ class TestNestedHPSearch(unittest.TestCase):
         """Corrupting outer-validation rows must not change HP selection."""
         from sklearn.model_selection import TimeSeriesSplit
         df = _make_minimal_df(n=120, seed=22)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
 
         outer_cv = TimeSeriesSplit(n_splits=N_OUTER_SPLITS)
         train_idx, val_idx = next(iter(outer_cv.split(X_elig)))
@@ -312,7 +312,7 @@ class TestNestedHPSearch(unittest.TestCase):
         """tune_hyperparameters must return a config from HP_GRID."""
         from sklearn.model_selection import TimeSeriesSplit
         df = _make_minimal_df(n=100, seed=33)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
 
         outer_cv = TimeSeriesSplit(n_splits=N_OUTER_SPLITS)
         train_idx, _ = next(iter(outer_cv.split(X_elig)))
@@ -386,7 +386,7 @@ class TestPredictionAlignment(unittest.TestCase):
         """OOF predictions must cover ≤ eligible rows."""
         df = _make_minimal_df(n=120, seed=77)
         result = _cv(df)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         self.assertLessEqual(len(result.oof_predictions), len(X_elig))
 
     def test_oof_y_pred_is_binary(self) -> None:
@@ -464,7 +464,7 @@ class TestReproducibility(unittest.TestCase):
     def test_final_model_reproducible(self) -> None:
         """train_final_model with same seed/data produces same predictions."""
         df = _make_minimal_df(n=80, seed=102)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         params = {"max_depth": 3, "learning_rate": 0.1}
 
         m1, X1, _ = _tfm(X_elig, y_elig, params, seed=42)
@@ -512,7 +512,7 @@ class TestWarmUpHandling(unittest.TestCase):
     def test_prepare_profile_data_positions_ge_warmup(self) -> None:
         """_prepare_profile_data: eligible positions must be >= warmup."""
         df = _make_minimal_df(n=100, seed=112)
-        _, _, positions, _ = _prepare_profile_data(df, warmup=20)
+        _, _, positions, _, _ = _prepare_profile_data(df, warmup=20)
         if len(positions) > 0:
             self.assertTrue(
                 (positions >= 20).all(),
@@ -551,7 +551,7 @@ class TestSmallDatasetTraining(unittest.TestCase):
 
     def test_train_final_model_directly(self) -> None:
         df = _make_minimal_df(n=80, seed=122)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         model, X_out, y_out = _tfm(X_elig, y_elig)
 
         self.assertIsNotNone(model)
@@ -574,7 +574,7 @@ class TestSmallDatasetTraining(unittest.TestCase):
         """Final model can be saved to JSON and reloaded with identical predictions."""
         import xgboost as xgb
         df = _make_minimal_df(n=80, seed=124)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         model, X_out, _ = _tfm(X_elig, y_elig)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -617,7 +617,7 @@ class TestSHAPFunctionality(unittest.TestCase):
     def setUpClass(cls) -> None:
         """Train a small model once for all SHAP tests."""
         df = _make_minimal_df(n=80, seed=130)
-        X_elig, y_elig, _, _ = _prepare_profile_data(df)
+        X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         model, X, _ = _tfm(X_elig, y_elig)
         cls.model = model
         cls.X = X
@@ -696,7 +696,7 @@ class TestHelpers(unittest.TestCase):
 
     def test_prepare_profile_data_feature_shape(self) -> None:
         df = _make_minimal_df(n=100, seed=200)
-        X, y, positions, iids = _prepare_profile_data(df)
+        X, y, positions, iids, _ = _prepare_profile_data(df)
         if len(X) > 0:
             self.assertEqual(X.shape[1], 11)
             self.assertEqual(len(X), len(y))
@@ -705,7 +705,7 @@ class TestHelpers(unittest.TestCase):
 
     def test_prepare_profile_data_y_binary(self) -> None:
         df = _make_minimal_df(n=100, seed=201)
-        _, y, _, _ = _prepare_profile_data(df)
+        _, y, _, _, _ = _prepare_profile_data(df)
         self.assertTrue(set(y).issubset({0.0, 1.0}))
 
     def test_build_xgb_classifier_custom_n_estimators(self) -> None:

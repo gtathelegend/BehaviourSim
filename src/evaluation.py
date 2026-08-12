@@ -78,18 +78,20 @@ def compute_classification_metrics(
 # ---------------------------------------------------------------------------
 
 def extract_overload_events(
-    state_sequence: pd.Series,
+    state_sequence: Union[pd.Series, pd.DataFrame],
     profile: str,
 ) -> List[Dict[str, Any]]:
-    """Extract contiguous overload events from the ground-truth state sequence.
+    """Extract contiguous overload events from ground-truth state sequence(s).
 
     An overload event is defined as a contiguous block of interactions where
     the simulator's ground-truth cognitive state is "Overload".
+    When a DataFrame with learner_id is provided, events are extracted strictly
+    within each learner sequence.
 
     Parameters
     ----------
-    state_sequence : pd.Series of str
-        The ground-truth state sequence from simulator output ('Optimal', 'Overload', 'Underload').
+    state_sequence : pd.Series or pd.DataFrame
+        The ground-truth state sequence or full simulation DataFrame.
     profile : str
         Profile name for metadata.
 
@@ -100,15 +102,68 @@ def extract_overload_events(
             {
                 'event_id': str,
                 'profile': str,
-                'start_interaction': int (1-indexed ID),
-                'end_interaction': int (1-indexed ID),
-                'start_idx': int (0-indexed position),
-                'end_idx': int (0-indexed position),
-                'duration': int (number of interactions)
+                'learner_id': int,
+                'start_interaction': int,
+                'end_interaction': int,
+                'start_idx': int,
+                'end_idx': int,
+                'duration': int
             }
     """
-    states = state_sequence.to_numpy()
     events: List[Dict[str, Any]] = []
+
+    if isinstance(state_sequence, pd.DataFrame) and "learner_id" in state_sequence.columns:
+        groups = state_sequence.groupby("learner_id", sort=False)
+        event_counter = 1
+        for learner_id, df_l in groups:
+            states = df_l["state"].to_numpy()
+            base_offset = df_l.index[0]
+            in_event = False
+            start_idx = -1
+
+            for local_idx, state in enumerate(states):
+                global_idx = base_offset + local_idx
+                if state == "Overload":
+                    if not in_event:
+                        in_event = True
+                        start_idx = global_idx
+                else:
+                    if in_event:
+                        end_idx = global_idx - 1
+                        events.append(
+                            {
+                                "event_id": f"{profile}_l{learner_id}_event_{event_counter}",
+                                "profile": profile,
+                                "learner_id": int(learner_id),
+                                "start_interaction": int(df_l.loc[start_idx, "interaction_id"]) if "interaction_id" in df_l.columns else start_idx + 1,
+                                "end_interaction": int(df_l.loc[end_idx, "interaction_id"]) if "interaction_id" in df_l.columns else end_idx + 1,
+                                "start_idx": start_idx,
+                                "end_idx": end_idx,
+                                "duration": end_idx - start_idx + 1,
+                            }
+                        )
+                        event_counter += 1
+                        in_event = False
+
+            if in_event:
+                end_idx = base_offset + len(states) - 1
+                events.append(
+                    {
+                        "event_id": f"{profile}_l{learner_id}_event_{event_counter}",
+                        "profile": profile,
+                        "learner_id": int(learner_id),
+                        "start_interaction": int(df_l.loc[start_idx, "interaction_id"]) if "interaction_id" in df_l.columns else start_idx + 1,
+                        "end_interaction": int(df_l.loc[end_idx, "interaction_id"]) if "interaction_id" in df_l.columns else end_idx + 1,
+                        "start_idx": start_idx,
+                        "end_idx": end_idx,
+                        "duration": end_idx - start_idx + 1,
+                    }
+                )
+                event_counter += 1
+        return events
+
+    # Single sequence fallback
+    states = state_sequence["state"].to_numpy() if isinstance(state_sequence, pd.DataFrame) else state_sequence.to_numpy()
     in_event = False
     start_idx = -1
     event_counter = 1
@@ -125,6 +180,7 @@ def extract_overload_events(
                     {
                         "event_id": f"{profile}_event_{event_counter}",
                         "profile": profile,
+                        "learner_id": 1,
                         "start_interaction": start_idx + 1,
                         "end_interaction": end_idx + 1,
                         "start_idx": start_idx,
@@ -141,6 +197,7 @@ def extract_overload_events(
             {
                 "event_id": f"{profile}_event_{event_counter}",
                 "profile": profile,
+                "learner_id": 1,
                 "start_interaction": start_idx + 1,
                 "end_interaction": end_idx + 1,
                 "start_idx": start_idx,
@@ -204,7 +261,7 @@ def compute_event_metrics(
 def compute_recovery_metrics(
     events: List[Dict[str, Any]],
     y_pred_seq: np.ndarray,
-    state_sequence: pd.Series,
+    state_sequence: Union[pd.Series, pd.DataFrame],
 ) -> Dict[str, Any]:
     """Calculate recovery-time metrics for detected overload events.
 
@@ -212,11 +269,9 @@ def compute_recovery_metrics(
       1. For each ground-truth event, identify the model's first overload prediction (y_pred == 1)
          within the event boundary (step `t`). If not detected, the event is skipped.
       2. Search forward in the ground-truth sequence from step `t` to find the first step `t_opt`
-         where the learner's state returns to "Optimal".
-      3. The recovery time is `t_opt - t` (number of interactions). The detection interaction itself
-         is not counted (e.g. if t_opt is the step right after t, recovery time is 1).
-      4. If the learner never returns to "Optimal" before the sequence ends, the event is
-         unrecovered (censored) and excluded from mean/median recovery time calculations.
+         where the learner's state returns to "Optimal". If multi-learner, search stops at learner boundary.
+      3. The recovery time is `t_opt - t` (number of interactions).
+      4. If the learner never returns to "Optimal" before sequence ends, event is unrecovered.
 
     Parameters
     ----------
@@ -224,17 +279,20 @@ def compute_recovery_metrics(
         Overload events extracted by `extract_overload_events`.
     y_pred_seq : np.ndarray
         Model's predicted binary sequence of length N.
-    state_sequence : pd.Series of str
+    state_sequence : pd.Series or pd.DataFrame
         The ground-truth state sequence of length N.
 
     Returns
     -------
     metrics : dict
-        Dict containing keys:
-          'n_events', 'n_detected', 'n_recovered', 'n_unrecovered',
-          'mean_recovery_time', 'median_recovery_time'
     """
-    states = state_sequence.to_numpy()
+    if isinstance(state_sequence, pd.DataFrame):
+        states = state_sequence["state"].to_numpy()
+        learner_ids = state_sequence["learner_id"].to_numpy() if "learner_id" in state_sequence.columns else None
+    else:
+        states = state_sequence.to_numpy()
+        learner_ids = None
+
     recovery_times: List[int] = []
     n_detected = 0
     n_recovered = 0
@@ -243,8 +301,8 @@ def compute_recovery_metrics(
     for event in events:
         start_idx = event["start_idx"]
         end_idx = event["end_idx"]
+        event_learner_id = event.get("learner_id", None)
 
-        # Find first model overload prediction within this event
         detected_idx = -1
         for idx in range(start_idx, end_idx + 1):
             if y_pred_seq[idx] == 1:
@@ -252,14 +310,17 @@ def compute_recovery_metrics(
                 break
 
         if detected_idx == -1:
-            # Undetected event: does not enter recovery analysis
             continue
 
         n_detected += 1
 
-        # Search forward for first 'Optimal' state
         recovered = False
         for idx in range(detected_idx + 1, len(states)):
+            if learner_ids is not None and event_learner_id is not None:
+                if learner_ids[idx] != event_learner_id:
+                    # Boundary of learner reached without returning to Optimal
+                    break
+
             if states[idx] == "Optimal":
                 recovery_time = idx - detected_idx
                 recovery_times.append(recovery_time)
@@ -546,8 +607,8 @@ def evaluate_models(
         y_true_full = build_overload_target(df_profile).to_numpy()
         valid_mask = ~np.isnan(y_true_full)
 
-        # Extract overload events (based on state sequence)
-        events = extract_overload_events(df_profile["state"], profile)
+        # Extract overload events (based on state sequence, respecting learner boundaries)
+        events = extract_overload_events(df_profile, profile)
         profile_event_data[profile] = events
         profile_pred_seqs[profile] = {}
 
@@ -561,6 +622,7 @@ def evaluate_models(
                 pred_rows.append(
                     {
                         "profile": profile,
+                        "learner_id": int(df_profile["learner_id"].iloc[idx]) if "learner_id" in df_profile.columns else 1,
                         "interaction_id": int(df_profile["interaction_id"].iloc[idx]),
                         "model": "rule_based_clsi",
                         "y_true": int(y_true_full[idx]),
@@ -579,6 +641,7 @@ def evaluate_models(
                 pred_rows.append(
                     {
                         "profile": profile,
+                        "learner_id": int(df_profile["learner_id"].iloc[idx]) if "learner_id" in df_profile.columns else 1,
                         "interaction_id": int(df_profile["interaction_id"].iloc[idx]),
                         "model": "bkt",
                         "y_true": int(y_true_full[idx]),
@@ -599,6 +662,7 @@ def evaluate_models(
             pred_rows.append(
                 {
                     "profile": profile,
+                    "learner_id": int(row["learner_id"]) if "learner_id" in row else 1,
                     "interaction_id": int(row["interaction_id"]),
                     "model": "clsi_adapt",
                     "y_true": int(row["y_true"]),
@@ -673,7 +737,6 @@ def evaluate_models(
         if not model_pm.empty:
             for metric in ["auc", "precision", "recall", "f1"]:
                 vals = model_pm[metric].to_numpy()
-                # Exclude NaNs (e.g. if AUC was undefined in one profile)
                 valid_vals = vals[~np.isnan(vals)]
 
                 if len(valid_vals) > 0:
@@ -713,7 +776,7 @@ def evaluate_models(
             y_pred_seq = profile_pred_seqs[profile][model]
 
             ev_metrics = compute_event_metrics(events, y_pred_seq)
-            rec_metrics = compute_recovery_metrics(events, y_pred_seq, df_profile["state"])
+            rec_metrics = compute_recovery_metrics(events, y_pred_seq, df_profile)
 
             rec_rows.append(
                 {
@@ -740,6 +803,7 @@ def evaluate_models(
         "aggregate_metrics": aggregate_metrics_df,
         "recovery_metrics": recovery_metrics_df,
         "state_statistics": state_statistics_df,
+        "predictions": pred_df,
     }
 
     # Write output files programmatically

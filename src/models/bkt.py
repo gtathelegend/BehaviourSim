@@ -236,13 +236,13 @@ class BKTModel:
     def _get_mastery_series(self, df: pd.DataFrame) -> np.ndarray:
         """Extract mastery probabilities from an interaction DataFrame.
 
-        Processes each learner profile independently (no cross-profile leakage).
+        Processes each learner sequence independently (no cross-learner leakage).
 
         Parameters
         ----------
         df : pd.DataFrame
             Interaction DataFrame with at least the column ``accuracy``
-            and optionally ``profile``.
+            and optionally ``profile`` and ``learner_id``.
 
         Returns
         -------
@@ -253,21 +253,17 @@ class BKTModel:
         if "accuracy" not in df.columns:
             raise ValueError("DataFrame must contain an 'accuracy' column.")
 
-        # Process each profile independently
-        if "profile" in df.columns:
-            profiles = df["profile"].unique()
+        group_cols = [c for c in ["profile", "learner_id"] if c in df.columns]
+        if not group_cols:
+            groups = [("__single__", df)]
         else:
-            profiles = ["__single__"]
+            groups = [(name, sub) for name, sub in df.groupby(group_cols, sort=False)]
 
         all_mastery: List[np.ndarray] = []
 
-        for profile in profiles:
-            if "profile" in df.columns:
-                sub = df[df["profile"] == profile].reset_index(drop=True)
-            else:
-                sub = df.reset_index(drop=True)
-
-            responses = sub["accuracy"].to_numpy(dtype=int).tolist()
+        for _, sub in groups:
+            sub_clean = sub.reset_index(drop=True)
+            responses = sub_clean["accuracy"].to_numpy(dtype=int).tolist()
             mastery_seq = self.fit_sequence(responses)
             all_mastery.append(np.array(mastery_seq, dtype=float))
 

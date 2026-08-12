@@ -12,7 +12,8 @@ class Config:
     seed: int = 42
 
     # Simulation settings
-    num_interactions_per_learner: int = 100
+    num_learners_per_profile: int = 10
+    num_interactions_per_learner: int = 1000
 
     # Feature engineering settings
     feature_window_size: int = 5

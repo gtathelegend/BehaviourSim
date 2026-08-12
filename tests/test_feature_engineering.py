@@ -378,6 +378,30 @@ class TestPrepareDataset(unittest.TestCase):
         X, y, meta = extract_features(df, window_size=5)
         self.assertEqual(X.shape[0], len(y))
 
+    def test_no_cross_learner_feature_or_target_window(self) -> None:
+        """Verify that last interaction of learner A and first interaction of learner B never share history."""
+        # Learner 1: 5 interactions with high NRT (100.0)
+        df_l1 = _make_df(5, profile="prof1", accuracy=[1, 1, 1, 1, 0], nrt=[100.0] * 5)
+        df_l1["learner_id"] = 1
+
+        # Learner 2: 5 interactions with low NRT (1.0)
+        df_l2 = _make_df(5, profile="prof1", accuracy=[0, 0, 0, 1, 1], nrt=[1.0] * 5)
+        df_l2["learner_id"] = 2
+
+        combined = pd.concat([df_l1, df_l2], ignore_index=True)
+
+        X, y, meta = prepare_dataset(combined, window_size=5, drop_nan_targets=False)
+
+        # Row 5 (index 5) is the first interaction of Learner 2.
+        # Its rolling mean NRT (last column of X) must be 1.0, not contaminated by Learner 1's 100.0.
+        self.assertAlmostEqual(X[5, -1], 1.0, places=5)
+
+        # Target for Learner 1 at t=4 (index 4) has future window checked only within Learner 1 (length 5 -> missing t+3 -> NaN target)
+        self.assertTrue(np.isnan(y[4]))
+
+        # Target for Learner 2 at t=0 (index 5) has prior window checked only within Learner 2 (length 0 prior -> 0.0 target)
+        self.assertEqual(y[5], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,7 +35,7 @@ def main(config: Config = default_config) -> None:
     results = evaluate_models(models, features, config, sim_data=sim_data)
 
     print("[5/5] Generating Visualizations...")
-    generate_plots(results, config)
+    generate_plots(results, config=config, sim_data=sim_data, models=models, features=features)
 
     print("Pipeline complete.")
 

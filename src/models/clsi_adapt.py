@@ -229,15 +229,15 @@ def _build_xgb_classifier(
 def _prepare_profile_data(
     df: pd.DataFrame,
     warmup: int = WARMUP_INTERACTIONS,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, pd.Series]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, pd.Series, pd.Series]:
     """Build feature matrix and labels for one profile's interaction sequence.
 
     Parameters
     ----------
     df:
-        Single-profile interaction DataFrame (simulator output).
+        Interaction DataFrame (single or multi-learner for a profile).
     warmup:
-        Number of interactions at the start of the sequence that are excluded
+        Number of interactions at the start of each learner's sequence that are excluded
         from *prediction* (but not from being training data).
 
     Returns
@@ -250,38 +250,45 @@ def _prepare_profile_data(
         0-indexed row positions within df of the eligible rows.
     interaction_ids : pd.Series
         interaction_id values aligned to eligible rows.
+    learner_ids : pd.Series
+        learner_id values aligned to eligible rows.
     """
     sub = df.reset_index(drop=True)
 
-    # Build features (causal: row t uses only data from rows 0..t)
-    X_full, _ = build_features(sub)  # shape (n, 11)
+    # Build features (causal: row t uses only data from rows 0..t within learner)
+    X_full, _ = build_features(sub)
 
-    # Build overload target (NaN for last future_window rows)
-    y_full = build_overload_target(sub)  # pd.Series of float / NaN
+    # Build overload target (NaN for last future_window rows per learner)
+    y_full = build_overload_target(sub)
 
     n = len(sub)
     positions = np.arange(n)
 
-    # Valid: target is not NaN (sufficient future) and target ∈ {0, 1}
     valid_mask = ~np.isnan(y_full.to_numpy())
 
-    # Warm-up: only positions >= warmup are eligible for prediction
-    warmup_mask = positions >= warmup
+    # Warm-up per learner sequence
+    if "interaction_id" in sub.columns:
+        warmup_mask = sub["interaction_id"].to_numpy() > warmup
+    else:
+        warmup_mask = positions >= warmup
 
-    # Eligible = valid AND warm-up passed
     eligible_mask = valid_mask & warmup_mask
 
     eligible_positions = positions[eligible_mask]
     X_eligible = X_full[eligible_mask]
     y_eligible = y_full.to_numpy()[eligible_mask]
 
-    interaction_ids: pd.Series
     if "interaction_id" in sub.columns:
         interaction_ids = sub["interaction_id"].iloc[eligible_positions].reset_index(drop=True)
     else:
         interaction_ids = pd.Series(eligible_positions + 1, name="interaction_id")
 
-    return X_eligible, y_eligible, eligible_positions, interaction_ids
+    if "learner_id" in sub.columns:
+        learner_ids = sub["learner_id"].iloc[eligible_positions].reset_index(drop=True)
+    else:
+        learner_ids = pd.Series(1, index=np.arange(len(eligible_positions)), name="learner_id")
+
+    return X_eligible, y_eligible, eligible_positions, interaction_ids, learner_ids
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +389,7 @@ def cross_validate_profile(
     Parameters
     ----------
     df:
-        Single-profile interaction DataFrame (simulator output).
+        Profile interaction DataFrame (may contain multiple learners).
     profile:
         Profile name string (used for labeling outputs).
     seed:
@@ -391,10 +398,8 @@ def cross_validate_profile(
         Warm-up interactions to exclude from prediction.
     n_outer_splits:
         Number of outer TimeSeriesSplit folds.
-
     n_estimators : int
-        Number of boosting rounds.  Pass ``TEST_N_ESTIMATORS`` in unit tests
-        to keep runtimes short without changing production behaviour.
+        Number of boosting rounds.
 
     Returns
     -------
@@ -402,26 +407,35 @@ def cross_validate_profile(
         Contains fold-level results, out-of-fold predictions, mean/std AUC,
         chosen final hyperparameters, and the trained final model.
     """
-    X_elig, y_elig, positions, interaction_ids = _prepare_profile_data(df, warmup=warmup)
+    X_elig, y_elig, positions, interaction_ids, learner_ids = _prepare_profile_data(df, warmup=warmup)
+
+    # Sort chronologically by interaction_id to guarantee that validation
+    # interactions strictly follow training interactions in time across all learners.
+    order_indices = np.argsort(interaction_ids.to_numpy(), kind="stable")
+    X_ordered = X_elig[order_indices]
+    y_ordered = y_elig[order_indices]
+    positions_ordered = positions[order_indices]
+    interaction_ids_ordered = interaction_ids.to_numpy()[order_indices]
+    learner_ids_ordered = learner_ids.to_numpy()[order_indices]
 
     outer_cv = TimeSeriesSplit(n_splits=n_outer_splits)
     fold_results: List[FoldResult] = []
 
-    # Out-of-fold containers (indexed into X_elig / y_elig)
-    oof_y_prob = np.full(len(y_elig), np.nan)
-    oof_y_pred = np.full(len(y_elig), np.nan)
+    # Out-of-fold containers (indexed into ordered arrays)
+    oof_y_prob = np.full(len(y_ordered), np.nan)
+    oof_y_pred = np.full(len(y_ordered), np.nan)
 
     hp_votes: List[Dict[str, Any]] = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(outer_cv.split(X_elig)):
+    for fold_idx, (train_idx, val_idx) in enumerate(outer_cv.split(X_ordered)):
         # ── Temporal ordering assertion ───────────────────────────────────
         assert train_idx.max() < val_idx.min(), (
             f"Fold {fold_idx}: validation starts before training ends. "
             f"train_max={train_idx.max()}, val_min={val_idx.min()}"
         )
 
-        X_tr, X_val = X_elig[train_idx], X_elig[val_idx]
-        y_tr, y_val = y_elig[train_idx], y_elig[val_idx]
+        X_tr, X_val = X_ordered[train_idx], X_ordered[val_idx]
+        y_tr, y_val = y_ordered[train_idx], y_ordered[val_idx]
 
         # Skip folds with insufficient class diversity
         if len(np.unique(y_tr)) < 2:
@@ -473,15 +487,14 @@ def cross_validate_profile(
     final_best_params = _majority_vote_params(hp_votes)
 
     # ── Build OOF prediction DataFrame ───────────────────────────────────
-    # Rows where oof_y_prob is still NaN were not covered by any fold
-    # (first fold's training rows have no corresponding validation fold).
     covered_mask = ~np.isnan(oof_y_prob)
     oof_df = pd.DataFrame(
         {
             "profile": profile,
-            "interaction_id": interaction_ids.to_numpy()[covered_mask],
-            "row_position": positions[covered_mask],
-            "y_true": y_elig[covered_mask].astype(int),
+            "learner_id": learner_ids_ordered[covered_mask],
+            "interaction_id": interaction_ids_ordered[covered_mask],
+            "row_position": positions_ordered[covered_mask],
+            "y_true": y_ordered[covered_mask].astype(int),
             "y_prob": oof_y_prob[covered_mask],
             "y_pred": oof_y_pred[covered_mask].astype(int),
         }
@@ -489,7 +502,7 @@ def cross_validate_profile(
 
     # ── Train final model on all eligible data ────────────────────────────
     final_model, X_final, y_final = train_final_model(
-        X_elig, y_elig, final_best_params, seed=seed, n_estimators=n_estimators
+        X_ordered, y_ordered, final_best_params, seed=seed, n_estimators=n_estimators
     )
 
     return ProfileCVResult(

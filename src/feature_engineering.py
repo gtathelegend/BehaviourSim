@@ -69,41 +69,40 @@ def build_features(
     df: pd.DataFrame,
     window_size: int = 10,
 ) -> Tuple[np.ndarray, pd.Index]:
-    """Build the feature matrix X for a single learner sequence.
+    """Build the feature matrix X for a single sequence or multi-learner DataFrame.
 
     Features for interaction t use only data from interactions 0..t (no future leakage).
-    All features in FEATURE_COLUMNS are already computed chronologically by the simulator
-    without forward-looking information, so passing them directly is safe.
-
-    The function additionally computes a rolling-window mean NRT column that is only
-    allowed to reference the current and prior rows within the same sequence.
+    When multiple learners are present (identified by profile and learner_id), rolling window
+    calculations are computed strictly within each learner sequence.
 
     Args:
-        df: Single-profile interaction DataFrame (must not mix profiles).
+        df: Interaction DataFrame (single profile/learner or multi-learner).
         window_size: Rolling window width for mean NRT calculation (default 10).
-                     At the start of the sequence, the available history is used.
 
     Returns:
         X: np.ndarray of shape (n_interactions, n_features)
-        index: pd.Index aligned with the rows of df (for downstream alignment).
+        index: pd.Index aligned with the rows of df.
     """
     _validate_columns(df)
 
-    # Work on a positional copy to avoid mutating caller data
     data = df.reset_index(drop=True)
 
-    # Rolling mean NRT (causal: min_periods=1 uses whatever history exists)
-    rolling_mean_nrt = (
-        data["nrt"]
-        .rolling(window=window_size, min_periods=1)
-        .mean()
-        .to_numpy()
-    )
+    group_cols = [c for c in ["profile", "learner_id"] if c in data.columns]
+    if group_cols:
+        rolling_mean_nrt = (
+            data.groupby(group_cols, group_keys=False)["nrt"]
+            .transform(lambda s: s.rolling(window=window_size, min_periods=1).mean())
+            .to_numpy()
+        )
+    else:
+        rolling_mean_nrt = (
+            data["nrt"]
+            .rolling(window=window_size, min_periods=1)
+            .mean()
+            .to_numpy()
+        )
 
-    # Assemble feature matrix in FEATURE_COLUMNS order
     base = data[FEATURE_COLUMNS].to_numpy(dtype=float)
-
-    # Append rolling_mean_nrt as an additional feature column
     X = np.hstack([base, rolling_mean_nrt.reshape(-1, 1)])
 
     return X, data.index
@@ -116,19 +115,20 @@ def build_overload_target(
     prior_accuracy_threshold: float = 0.75,
     future_accuracy_threshold: float = 0.50,
 ) -> pd.Series:
-    """Build binary overload target labels for a single-profile interaction sequence.
+    """Build binary overload target labels for an interaction sequence.
+
+    If multiple learners are present, targets are computed independently per learner.
 
     Alignment (exact):
-      - For interaction at row-position t (0-indexed):
-        - prior_acc  = mean(accuracy[t - prior_window + 1 .. t])   (inclusive, positions t-3..t for default 4)
-        - future_acc = mean(accuracy[t + 1 .. t + future_window])  (positions t+1..t+3 for default 3)
+      - For interaction at position t (0-indexed within learner sequence):
+        - prior_acc  = mean(accuracy[t - prior_window + 1 .. t])   (positions t-3..t)
+        - future_acc = mean(accuracy[t + 1 .. t + future_window])  (positions t+1..t+3)
         - overload = 1 iff prior_acc >= prior_accuracy_threshold AND future_acc <= future_accuracy_threshold
-      - Rows where t < prior_window - 1 have insufficient prior history → labeled 0.
-      - Rows where t + future_window >= len(df) have insufficient future observations → labeled NaN.
-        Callers should drop NaN rows before model training.
+      - Insufficient prior history (< prior_window - 1) -> 0.
+      - Insufficient future observations (t + future_window >= len(sequence)) -> NaN.
 
     Args:
-        df: Single-profile interaction DataFrame.
+        df: Interaction DataFrame.
         prior_window: Number of preceding items (including t) checked for high accuracy.
         future_window: Number of future items checked for accuracy collapse.
         prior_accuracy_threshold: Minimum mean accuracy in prior window to qualify.
@@ -138,20 +138,32 @@ def build_overload_target(
         pd.Series of float (0.0, 1.0, or NaN) indexed the same as df.
     """
     _validate_columns(df)
+    
+    group_cols = [c for c in ["profile", "learner_id"] if c in df.columns]
+    if group_cols and len(df.groupby(group_cols)) > 1:
+        # Process each learner sequence independently
+        results = []
+        for _, sub in df.groupby(group_cols, sort=False):
+            res = build_overload_target(
+                sub,
+                prior_window=prior_window,
+                future_window=future_window,
+                prior_accuracy_threshold=prior_accuracy_threshold,
+                future_accuracy_threshold=future_accuracy_threshold,
+            )
+            results.append(res)
+        return pd.concat(results).reindex(df.index)
+
     n = len(df)
     acc = df["accuracy"].to_numpy(dtype=float)
     labels = np.full(n, np.nan)
 
     for t in range(n):
-        # Check future availability first
         if t + future_window >= n:
-            # Insufficient future observations → NaN (already set)
             continue
 
-        # Check prior availability
         prior_start = t - prior_window + 1
         if prior_start < 0:
-            # Insufficient prior history → label 0
             labels[t] = 0.0
             continue
 
@@ -171,15 +183,12 @@ def build_underload_target(
     window: int = 4,
     nrt_threshold: float = 0.3,
 ) -> pd.Series:
-    """Build binary underload detection labels for a single-profile interaction sequence.
+    """Build binary underload detection labels for an interaction sequence.
 
-    An interaction at position t is labeled underload=1 when:
-      1. All `window` items [t - window + 1 .. t] have accuracy = 1 (perfect accuracy).
-      2. Mean NRT of those `window` items < nrt_threshold.
-    Interactions where t < window - 1 (insufficient history) are labeled 0.
+    If multiple learners are present, targets are computed independently per learner.
 
     Args:
-        df: Single-profile interaction DataFrame.
+        df: Interaction DataFrame.
         window: Number of consecutive items to check (default 4).
         nrt_threshold: NRT mean threshold below which underload is flagged (default 0.3).
 
@@ -187,6 +196,15 @@ def build_underload_target(
         pd.Series of int (0 or 1) indexed the same as df.
     """
     _validate_columns(df)
+
+    group_cols = [c for c in ["profile", "learner_id"] if c in df.columns]
+    if group_cols and len(df.groupby(group_cols)) > 1:
+        results = []
+        for _, sub in df.groupby(group_cols, sort=False):
+            res = build_underload_target(sub, window=window, nrt_threshold=nrt_threshold)
+            results.append(res)
+        return pd.concat(results).reindex(df.index)
+
     n = len(df)
     acc = df["accuracy"].to_numpy(dtype=float)
     nrt = df["nrt"].to_numpy(dtype=float)
@@ -206,17 +224,17 @@ def prepare_dataset(
     window_size: int = 10,
     drop_nan_targets: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-    """Prepare the full supervised dataset from a (possibly multi-profile) interaction log.
+    """Prepare the full supervised dataset from a (possibly multi-learner) interaction log.
 
-    Handles multiple profiles by processing each learner independently, preventing
-    window history from crossing profile boundaries.
+    Handles multiple profiles and learners independently, preventing feature windows
+    and targets from crossing learner boundaries.
 
     Returns X (features), y (overload labels), and a metadata DataFrame aligned to X/y
-    rows. The metadata DataFrame carries columns: profile, interaction_id, overload,
-    underload for downstream evaluation and debugging.
+    rows. The metadata DataFrame carries columns: profile, learner_id, interaction_id,
+    overload, underload for downstream evaluation and debugging.
 
     Args:
-        df: Interaction DataFrame, either single-profile or combined multi-profile.
+        df: Interaction DataFrame, single or multi-learner.
         window_size: Rolling window size for feature computation.
         drop_nan_targets: If True, rows with NaN overload targets (end-of-sequence)
                           are dropped from X and y before returning.
@@ -233,22 +251,23 @@ def prepare_dataset(
     all_y_underload: List[np.ndarray] = []
     all_meta: List[pd.DataFrame] = []
 
-    profiles = df["profile"].unique() if "profile" in df.columns else ["__single__"]
+    group_cols = [c for c in ["profile", "learner_id"] if c in df.columns]
+    if not group_cols:
+        groups = [("__single__", df)]
+    else:
+        groups = [(name, sub) for name, sub in df.groupby(group_cols, sort=False)]
 
-    for profile in profiles:
-        if "profile" in df.columns:
-            sub = df[df["profile"] == profile].copy().reset_index(drop=True)
-        else:
-            sub = df.copy().reset_index(drop=True)
-
-        X_sub, _ = build_features(sub, window_size=window_size)
-        y_overload_sub = build_overload_target(sub)
-        y_underload_sub = build_underload_target(sub)
+    for group_key, sub in groups:
+        sub_clean = sub.reset_index(drop=True)
+        X_sub, _ = build_features(sub_clean, window_size=window_size)
+        y_overload_sub = build_overload_target(sub_clean)
+        y_underload_sub = build_underload_target(sub_clean)
 
         meta_sub = pd.DataFrame(
             {
-                "profile": sub["profile"] if "profile" in sub.columns else profile,
-                "interaction_id": sub["interaction_id"] if "interaction_id" in sub.columns else np.arange(len(sub)),
+                "profile": sub_clean["profile"] if "profile" in sub_clean.columns else "__single__",
+                "learner_id": sub_clean["learner_id"] if "learner_id" in sub_clean.columns else 1,
+                "interaction_id": sub_clean["interaction_id"] if "interaction_id" in sub_clean.columns else np.arange(1, len(sub_clean) + 1),
                 "overload": y_overload_sub.to_numpy(),
                 "underload": y_underload_sub.to_numpy(),
             }

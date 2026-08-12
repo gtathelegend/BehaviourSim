@@ -100,15 +100,17 @@ def _logistic(x: float) -> float:
 
 def simulate_learner(
     profile_name: str,
-    num_interactions: int = 100,
+    num_interactions: Optional[int] = None,
+    learner_id: int = 1,
     seed: Optional[int] = None,
     config: Config = default_config,
 ) -> pd.DataFrame:
-    """Simulate interaction log for a single learner profile.
+    """Simulate interaction log for a single independent synthetic learner.
 
     Args:
         profile_name: Name of the learner profile (must be one of LEARNER_PROFILES keys).
-        num_interactions: Number of interactions to simulate.
+        num_interactions: Number of interactions to simulate. If None, uses config.num_interactions_per_learner.
+        learner_id: Numeric identifier for the learner sequence.
         seed: Random seed for reproducibility. If None, uses config.seed.
         config: Configuration instance containing default parameters.
 
@@ -120,12 +122,13 @@ def simulate_learner(
             f"Unknown profile '{profile_name}'. Must be one of {list(LEARNER_PROFILES.keys())}"
         )
 
+    n_interactions = num_interactions if num_interactions is not None else config.num_interactions_per_learner
     profile = LEARNER_PROFILES[profile_name]
     effective_seed = seed if seed is not None else config.seed
     rng = np.random.default_rng(effective_seed)
     window_size = config.feature_window_size
 
-    # Simulation tracking containers
+    # Simulation tracking containers (clean state reset for learner)
     states: List[str] = []
     difficulties: List[int] = []
     accuracies: List[int] = []
@@ -145,7 +148,7 @@ def simulate_learner(
     current_streak_incorrect = 0
     cumulative_session_time = 0.0
 
-    for i in range(num_interactions):
+    for i in range(n_interactions):
         # 1. State Transition Determination
         # Precedence & Mutual Exclusivity Documentation:
         # Rule 1 (Overload Override): Triggered if recent 5-item mean accuracy < 0.4 (probability 0.70).
@@ -163,7 +166,6 @@ def simulate_learner(
                 if rng.random() < 0.70:
                     current_state = "Overload"
                 else:
-                    # Transition via base HMM matrix
                     trans_probs = BASE_TRANSITION_MATRIX[current_state]
                     current_state = str(
                         rng.choice(
@@ -250,7 +252,6 @@ def simulate_learner(
         session_time_list.append(cumulative_session_time)
 
         # 5. Retries
-        # Incorrect & Overloaded -> 40% probability of 1-3 retries; Otherwise 0-1 retry.
         if accuracy == 0 and current_state == "Overload":
             if rng.random() < 0.40:
                 retries = int(rng.choice([1, 2, 3]))
@@ -268,12 +269,12 @@ def simulate_learner(
             p_help = profile.help_prob_overload
         elif current_state == "Optimal":
             p_help = profile.help_prob_optimal
-        else:  # Underload (explicit low probability)
+        else:  # Underload
             p_help = 0.02
         help_requested = int(rng.random() < p_help)
         help_list.append(help_requested)
 
-        # 7. Confidence (1-5, lower in Overload, higher in Underload)
+        # 7. Confidence (1-5)
         if current_state == "Overload":
             probs = [0.40, 0.35, 0.15, 0.07, 0.03]
         elif current_state == "Optimal":
@@ -284,7 +285,7 @@ def simulate_learner(
         confidence = int(rng.choice([1, 2, 3, 4, 5], p=probs))
         confidence_list.append(confidence)
 
-        # 8. Chronological Windowed Metrics
+        # 8. Chronological Windowed Metrics (within learner)
         window_start = max(0, i + 1 - window_size)
         window_accs = accuracies[window_start : i + 1]
         window_nrts = nrts[window_start : i + 1]
@@ -302,7 +303,8 @@ def simulate_learner(
     df = pd.DataFrame(
         {
             "profile": profile_name,
-            "interaction_id": np.arange(1, num_interactions + 1, dtype=int),
+            "learner_id": learner_id,
+            "interaction_id": np.arange(1, n_interactions + 1, dtype=int),
             "state": states,
             "difficulty": difficulties,
             "accuracy": accuracies,
@@ -322,30 +324,41 @@ def simulate_learner(
 
 
 def simulate_all_profiles(
-    num_interactions: int = 100,
+    num_interactions: Optional[int] = None,
+    num_learners: Optional[int] = None,
     seed: int = 42,
     config: Config = default_config,
 ) -> Dict[str, pd.DataFrame]:
-    """Simulate interaction datasets for all registered learner profiles.
+    """Simulate interaction datasets for all registered learner profiles across multiple independent learners.
 
     Args:
-        num_interactions: Number of interactions per profile.
-        seed: Base random seed. Each profile derives a distinct deterministic seed.
+        num_interactions: Number of interactions per learner sequence. If None, uses config.num_interactions_per_learner.
+        num_learners: Number of independent learners per profile. If None, uses config.num_learners_per_profile.
+        seed: Base random seed. Each profile and learner derives a distinct deterministic seed.
         config: Configuration instance.
 
     Returns:
-        Dictionary mapping profile_name to its simulated DataFrame.
+        Dictionary mapping profile_name to its concatenated multi-learner DataFrame.
     """
+    n_interactions = num_interactions if num_interactions is not None else config.num_interactions_per_learner
+    n_learners = num_learners if num_learners is not None else config.num_learners_per_profile
+
     results: Dict[str, pd.DataFrame] = {}
-    for idx, profile_name in enumerate(LEARNER_PROFILES.keys()):
-        # Profile-specific seed derivation ensures independence and determinism
-        profile_seed = seed + idx * 1000
-        results[profile_name] = simulate_learner(
-            profile_name=profile_name,
-            num_interactions=num_interactions,
-            seed=profile_seed,
-            config=config,
-        )
+    for p_idx, profile_name in enumerate(LEARNER_PROFILES.keys()):
+        learner_dfs: List[pd.DataFrame] = []
+        for l_idx in range(1, n_learners + 1):
+            # Profile and learner specific seed derivation ensures independence and determinism
+            learner_seed = seed + p_idx * 10000 + (l_idx - 1) * 100
+            df_learner = simulate_learner(
+                profile_name=profile_name,
+                num_interactions=n_interactions,
+                learner_id=l_idx,
+                seed=learner_seed,
+                config=config,
+            )
+            learner_dfs.append(df_learner)
+
+        results[profile_name] = pd.concat(learner_dfs, ignore_index=True)
     return results
 
 
@@ -385,6 +398,80 @@ def save_simulation(
     return saved_paths
 
 
+def validate_simulation_diagnostics(
+    sim_data: Dict[str, pd.DataFrame]
+) -> Dict[str, pd.DataFrame]:
+    """Calculate and report diagnostic state and target distributions per profile and per learner.
+
+    Args:
+        sim_data: Dictionary mapping profile names to simulated DataFrames.
+
+    Returns:
+        Dict with keys 'profile_summary' and 'learner_summary' DataFrames.
+    """
+    from src.feature_engineering import build_overload_target
+
+    profile_rows: List[Dict[str, Any]] = []
+    learner_rows: List[Dict[str, Any]] = []
+
+    for profile_name, df_profile in sim_data.items():
+        learners = df_profile["learner_id"].unique() if "learner_id" in df_profile.columns else [1]
+        n_learners = len(learners)
+        total_interactions = len(df_profile)
+
+        profile_valid = 0
+        profile_pos = 0
+
+        for l_id in learners:
+            df_l = df_profile[df_profile["learner_id"] == l_id] if "learner_id" in df_profile.columns else df_profile
+            target_l = build_overload_target(df_l)
+            valid_mask = ~target_l.isna()
+            n_valid = int(valid_mask.sum())
+            n_pos = int((target_l[valid_mask] == 1.0).sum())
+
+            profile_valid += n_valid
+            profile_pos += n_pos
+
+            state_counts = df_l["state"].value_counts().to_dict()
+            opt_cnt = state_counts.get("Optimal", 0)
+            ov_cnt = state_counts.get("Overload", 0)
+            und_cnt = state_counts.get("Underload", 0)
+
+            learner_rows.append(
+                {
+                    "profile": profile_name,
+                    "learner_id": l_id,
+                    "total_interactions": len(df_l),
+                    "valid_targets": n_valid,
+                    "positive_targets": n_pos,
+                    "positive_rate": n_pos / max(1, n_valid),
+                    "optimal_count": opt_cnt,
+                    "overload_count": ov_cnt,
+                    "underload_count": und_cnt,
+                }
+            )
+
+        pos_rate = profile_pos / max(1, profile_valid)
+        profile_rows.append(
+            {
+                "profile": profile_name,
+                "n_learners": n_learners,
+                "total_interactions": total_interactions,
+                "valid_targets": profile_valid,
+                "positive_targets": profile_pos,
+                "positive_rate": pos_rate,
+            }
+        )
+
+    profile_df = pd.DataFrame(profile_rows)
+    learner_df = pd.DataFrame(learner_rows)
+
+    return {
+        "profile_summary": profile_df,
+        "learner_summary": learner_df,
+    }
+
+
 def run_simulation(config: Config = default_config) -> Dict[str, pd.DataFrame]:
     """Run full simulation pipeline step and save outputs.
 
@@ -396,6 +483,7 @@ def run_simulation(config: Config = default_config) -> Dict[str, pd.DataFrame]:
     """
     results = simulate_all_profiles(
         num_interactions=config.num_interactions_per_learner,
+        num_learners=config.num_learners_per_profile,
         seed=config.seed,
         config=config,
     )
