@@ -164,7 +164,7 @@ class RuleBasedCLSIModel:
     >>> proba  = model.predict_proba(df)
     """
 
-    def __init__(self, overload_threshold: float = OVERLOAD_THRESHOLD) -> None:
+    def __init__(self, overload_threshold: float = OVERLOAD_THRESHOLD, **kwargs) -> None:
         self.overload_threshold = overload_threshold
 
     # ------------------------------------------------------------------

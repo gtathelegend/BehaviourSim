@@ -165,6 +165,7 @@ class BKTModel:
         guess: float = DEFAULT_GUESS,
         slip: float = DEFAULT_SLIP,
         struggle_threshold: float = STRUGGLE_THRESHOLD,
+        **kwargs,
     ) -> None:
         self.initial_mastery = initial_mastery
         self.learn = learn

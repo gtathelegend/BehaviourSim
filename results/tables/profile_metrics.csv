@@ -1,0 +1,12 @@
+profile,model,auc,precision,recall,f1,n_samples,n_positive,n_negative
+fast_accurate,clsi_adapt,,0.0,0.0,0.0,24,0,24
+fast_accurate,rule_based_clsi,0.21578947368421048,0.012345679012345678,0.5,0.024096385542168676,97,2,95
+fast_accurate,bkt,0.0,0.0,0.0,0.0,97,2,95
+fast_inaccurate,rule_based_clsi,,0.0,0.0,0.0,97,0,97
+fast_inaccurate,bkt,,0.0,0.0,0.0,97,0,97
+slow_accurate,rule_based_clsi,0.03125,0.0,0.0,0.0,97,1,96
+slow_accurate,bkt,0.08333333333333337,0.0,0.0,0.0,97,1,96
+slow_inaccurate,rule_based_clsi,,0.0,0.0,0.0,97,0,97
+slow_inaccurate,bkt,,0.0,0.0,0.0,97,0,97
+average,rule_based_clsi,,0.0,0.0,0.0,97,0,97
+average,bkt,,0.0,0.0,0.0,97,0,97

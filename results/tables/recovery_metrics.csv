@@ -1,0 +1,16 @@
+profile,model,n_events,n_detected,n_recovered,n_unrecovered,event_recall,mean_recovery_time,median_recovery_time
+fast_accurate,clsi_adapt,15,0,0,0,0.0,,
+fast_accurate,rule_based_clsi,15,14,14,0,0.9333333333333333,6.214285714285714,4.0
+fast_accurate,bkt,15,13,13,0,0.8666666666666667,5.615384615384615,3.0
+fast_inaccurate,clsi_adapt,8,0,0,0,0.0,,
+fast_inaccurate,rule_based_clsi,8,8,7,1,1.0,11.714285714285714,6.0
+fast_inaccurate,bkt,8,8,7,1,1.0,11.714285714285714,6.0
+slow_accurate,clsi_adapt,15,0,0,0,0.0,,
+slow_accurate,rule_based_clsi,15,13,9,4,0.8666666666666667,6.222222222222222,5.0
+slow_accurate,bkt,15,13,11,2,0.8666666666666667,5.818181818181818,5.0
+slow_inaccurate,clsi_adapt,12,0,0,0,0.0,,
+slow_inaccurate,rule_based_clsi,12,12,11,1,1.0,9.454545454545455,7.0
+slow_inaccurate,bkt,12,12,11,1,1.0,9.454545454545455,7.0
+average,clsi_adapt,10,0,0,0,0.0,,
+average,rule_based_clsi,10,10,9,1,1.0,11.222222222222221,5.0
+average,bkt,10,10,9,1,1.0,11.11111111111111,5.0

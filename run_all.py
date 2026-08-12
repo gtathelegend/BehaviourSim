@@ -32,7 +32,7 @@ def main(config: Config = default_config) -> None:
     }
 
     print("[4/5] Evaluating Models...")
-    results = evaluate_models(models, features, config)
+    results = evaluate_models(models, features, config, sim_data=sim_data)
 
     print("[5/5] Generating Visualizations...")
     generate_plots(results, config)
