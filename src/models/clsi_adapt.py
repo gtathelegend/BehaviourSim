@@ -298,6 +298,7 @@ def _prepare_profile_data(
 def tune_hyperparameters(
     X_train: np.ndarray,
     y_train: np.ndarray,
+    interaction_ids_train: Optional[np.ndarray] = None,
     seed: int = 42,
     n_inner_splits: int = N_INNER_SPLITS,
     hp_grid: List[Dict[str, Any]] = HP_GRID,
@@ -309,12 +310,18 @@ def tune_hyperparameters(
     validation fold never enters this function; the contract is enforced
     by the caller.
 
+    Because multiple synthetic learners share the same interaction-time index,
+    forward-chaining splits are performed over unique interaction time steps
+    rather than individual observation rows when ``interaction_ids_train`` is provided.
+
     Parameters
     ----------
     X_train : np.ndarray
         Feature matrix for the outer training portion.
     y_train : np.ndarray
         Binary labels for the outer training portion.
+    interaction_ids_train : np.ndarray, optional
+        Interaction ID time step array aligned to X_train rows.
     seed : int
         Random seed for reproducibility.
     n_inner_splits : int
@@ -322,17 +329,30 @@ def tune_hyperparameters(
     hp_grid : list of dict
         Hyperparameter combinations to evaluate.
     n_estimators : int
-        Number of boosting rounds.  Pass ``TEST_N_ESTIMATORS`` in unit tests
-        to keep runtimes short without changing production behaviour.
+        Number of boosting rounds.
 
     Returns
     -------
     best_params : dict
         The hyperparameter dict with the highest mean inner-fold AUC.
-        If all hyperparameter configs produce the same AUC (or only one
-        class is present), the first entry in hp_grid is returned.
     """
-    inner_cv = TimeSeriesSplit(n_splits=n_inner_splits)
+    if interaction_ids_train is not None:
+        unique_times = np.sort(np.unique(interaction_ids_train))
+        if len(unique_times) >= n_inner_splits + 1:
+            inner_cv = TimeSeriesSplit(n_splits=n_inner_splits)
+            inner_splits = []
+            for u_tr_idx, u_val_idx in inner_cv.split(unique_times):
+                u_tr_set = set(unique_times[u_tr_idx])
+                u_val_set = set(unique_times[u_val_idx])
+                i_tr = np.where(np.isin(interaction_ids_train, list(u_tr_set)))[0]
+                i_val = np.where(np.isin(interaction_ids_train, list(u_val_set)))[0]
+                inner_splits.append((i_tr, i_val))
+        else:
+            inner_cv = TimeSeriesSplit(n_splits=n_inner_splits)
+            inner_splits = list(inner_cv.split(X_train))
+    else:
+        inner_cv = TimeSeriesSplit(n_splits=n_inner_splits)
+        inner_splits = list(inner_cv.split(X_train))
 
     best_auc = -1.0
     best_params = hp_grid[0]
@@ -340,11 +360,21 @@ def tune_hyperparameters(
     for params in hp_grid:
         fold_aucs: List[float] = []
 
-        for inner_train_idx, inner_val_idx in inner_cv.split(X_train):
-            # Assert temporal ordering within inner split
-            assert inner_train_idx.max() < inner_val_idx.min(), (
-                "Inner split violation: validation indices precede training indices."
-            )
+        for inner_train_idx, inner_val_idx in inner_splits:
+            if interaction_ids_train is not None:
+                tr_iids = interaction_ids_train[inner_train_idx]
+                val_iids = interaction_ids_train[inner_val_idx]
+                assert tr_iids.max() < val_iids.min(), (
+                    f"Inner split violation: inner validation starts before inner training ends. "
+                    f"max_train_iid={tr_iids.max()}, min_val_iid={val_iids.min()}"
+                )
+                assert len(set(tr_iids).intersection(set(val_iids))) == 0, (
+                    "Inner split violation: simultaneous time leakage in inner fold."
+                )
+            else:
+                assert inner_train_idx.max() < inner_val_idx.min(), (
+                    "Inner split violation: validation indices precede training indices."
+                )
 
             X_i_tr, X_i_val = X_train[inner_train_idx], X_train[inner_val_idx]
             y_i_tr, y_i_val = y_train[inner_train_idx], y_train[inner_val_idx]
@@ -386,6 +416,17 @@ def cross_validate_profile(
 ) -> ProfileCVResult:
     """Run time-series cross-validation for one learner profile.
 
+    Methodological Note:
+    -------------------
+    Because multiple synthetic learners share the same interaction-time index,
+    forward-chaining splits are performed over unique interaction time steps
+    rather than individual observation rows. This ensures that all learners at a given
+    time step belong to the same temporal partition and guarantees strictly later
+    validation times (max(train_interaction_id) < min(val_interaction_id)).
+
+    CLSI-Adapt trains one pooled XGBoost model per behavioral profile using multiple
+    independent learner traces of that profile.
+
     Parameters
     ----------
     df:
@@ -409,33 +450,54 @@ def cross_validate_profile(
     """
     X_elig, y_elig, positions, interaction_ids, learner_ids = _prepare_profile_data(df, warmup=warmup)
 
-    # Sort chronologically by interaction_id to guarantee that validation
-    # interactions strictly follow training interactions in time across all learners.
-    order_indices = np.argsort(interaction_ids.to_numpy(), kind="stable")
-    X_ordered = X_elig[order_indices]
-    y_ordered = y_elig[order_indices]
-    positions_ordered = positions[order_indices]
-    interaction_ids_ordered = interaction_ids.to_numpy()[order_indices]
-    learner_ids_ordered = learner_ids.to_numpy()[order_indices]
+    iids_arr = interaction_ids.to_numpy()
+    lids_arr = learner_ids.to_numpy()
 
-    outer_cv = TimeSeriesSplit(n_splits=n_outer_splits)
+    # Get unique, chronologically ordered interaction time steps
+    unique_times = np.sort(np.unique(iids_arr))
+
+    if len(unique_times) >= n_outer_splits + 1:
+        outer_cv = TimeSeriesSplit(n_splits=n_outer_splits)
+        outer_splits = []
+        for u_tr_idx, u_val_idx in outer_cv.split(unique_times):
+            u_tr_set = set(unique_times[u_tr_idx])
+            u_val_set = set(unique_times[u_val_idx])
+            train_idx = np.where(np.isin(iids_arr, list(u_tr_set)))[0]
+            val_idx = np.where(np.isin(iids_arr, list(u_val_set)))[0]
+            outer_splits.append((train_idx, val_idx))
+    else:
+        outer_cv = TimeSeriesSplit(n_splits=n_outer_splits)
+        outer_splits = list(outer_cv.split(X_elig))
+
     fold_results: List[FoldResult] = []
 
-    # Out-of-fold containers (indexed into ordered arrays)
-    oof_y_prob = np.full(len(y_ordered), np.nan)
-    oof_y_pred = np.full(len(y_ordered), np.nan)
+    oof_y_prob = np.full(len(y_elig), np.nan)
+    oof_y_pred = np.full(len(y_elig), np.nan)
 
     hp_votes: List[Dict[str, Any]] = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(outer_cv.split(X_ordered)):
-        # ── Temporal ordering assertion ───────────────────────────────────
-        assert train_idx.max() < val_idx.min(), (
-            f"Fold {fold_idx}: validation starts before training ends. "
-            f"train_max={train_idx.max()}, val_min={val_idx.min()}"
+    for fold_idx, (train_idx, val_idx) in enumerate(outer_splits):
+        tr_iids = iids_arr[train_idx]
+        val_iids = iids_arr[val_idx]
+        tr_lids = lids_arr[train_idx]
+        val_lids = lids_arr[val_idx]
+
+        # ── Rigorous outer-fold invariant assertions ────────────────────────
+        assert tr_iids.max() < val_iids.min(), (
+            f"Fold {fold_idx}: temporal ordering violation. "
+            f"max_train_iid={tr_iids.max()} >= min_val_iid={val_iids.min()}"
         )
 
-        X_tr, X_val = X_ordered[train_idx], X_ordered[val_idx]
-        y_tr, y_val = y_ordered[train_idx], y_ordered[val_idx]
+        assert len(set(zip(tr_lids, tr_iids)).intersection(set(zip(val_lids, val_iids)))) == 0, (
+            f"Fold {fold_idx}: duplicate (learner_id, interaction_id) across train and validation."
+        )
+
+        assert len(set(tr_iids).intersection(set(val_iids))) == 0, (
+            f"Fold {fold_idx}: simultaneous time leakage! Shared time steps present in both train and validation."
+        )
+
+        X_tr, X_val = X_elig[train_idx], X_elig[val_idx]
+        y_tr, y_val = y_elig[train_idx], y_elig[val_idx]
 
         # Skip folds with insufficient class diversity
         if len(np.unique(y_tr)) < 2:
@@ -443,8 +505,8 @@ def cross_validate_profile(
 
         # ── Nested hyperparameter search on outer TRAINING portion only ──
         best_params = tune_hyperparameters(
-            X_tr, y_tr, seed=seed, n_inner_splits=N_INNER_SPLITS,
-            n_estimators=n_estimators,
+            X_tr, y_tr, interaction_ids_train=tr_iids, seed=seed,
+            n_inner_splits=N_INNER_SPLITS, n_estimators=n_estimators,
         )
         hp_votes.append(best_params)
 
@@ -491,10 +553,10 @@ def cross_validate_profile(
     oof_df = pd.DataFrame(
         {
             "profile": profile,
-            "learner_id": learner_ids_ordered[covered_mask],
-            "interaction_id": interaction_ids_ordered[covered_mask],
-            "row_position": positions_ordered[covered_mask],
-            "y_true": y_ordered[covered_mask].astype(int),
+            "learner_id": lids_arr[covered_mask],
+            "interaction_id": iids_arr[covered_mask],
+            "row_position": positions[covered_mask],
+            "y_true": y_elig[covered_mask].astype(int),
             "y_prob": oof_y_prob[covered_mask],
             "y_pred": oof_y_pred[covered_mask].astype(int),
         }
@@ -502,7 +564,7 @@ def cross_validate_profile(
 
     # ── Train final model on all eligible data ────────────────────────────
     final_model, X_final, y_final = train_final_model(
-        X_ordered, y_ordered, final_best_params, seed=seed, n_estimators=n_estimators
+        X_elig, y_elig, final_best_params, seed=seed, n_estimators=n_estimators
     )
 
     return ProfileCVResult(
