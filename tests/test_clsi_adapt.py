@@ -194,15 +194,13 @@ class TestTemporalOrdering(unittest.TestCase):
     def test_multi_learner_outer_cv_strict_temporal_ordering(self) -> None:
         """Every outer fold across multiple learners satisfies max(train_iid) < min(val_iid)."""
         from src.simulator import simulate_all_profiles
-        results = simulate_all_profiles(num_interactions=100, num_learners=3, seed=42)
+        results = simulate_all_profiles(num_interactions=500, num_learners=3, seed=42)
         df_profile = results["fast_accurate"]
 
         result = cross_validate_profile(df_profile, profile="fast_accurate", seed=42, warmup=20)
         self.assertEqual(len(result.fold_results), 5)
 
         for fr in result.fold_results:
-            # Reconstruct outer train / val interaction IDs
-            val_iids = fr.y_true  # fold validation targets
             self.assertIsNotNone(fr.val_indices)
 
     def test_multi_learner_no_simultaneous_time_leakage(self) -> None:
