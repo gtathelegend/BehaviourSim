@@ -1,0 +1,12 @@
+PUBLICATION FIGURE CAPTIONS
+==========================
+
+Figure 1: Complete experimental architecture and pipeline flow for the CLSI-Adapt simulator framework. Synthetic learner trajectories pass through temporal feature engineering before evaluation on CLSI-Adapt (XGBoost), Rule-Based CLSI, and Bayesian Knowledge Tracing (BKT). BKT is evaluated as a domain mastery tracker / struggle proxy rather than a direct cognitive-load detector.
+
+Figure 2: Receiver Operating Characteristic (ROC) curves for overload prediction across synthetic learner profiles under forward-chaining temporal evaluation. CLSI-Adapt predictions are generated from out-of-fold XGBoost models, while Rule-Based CLSI and BKT provide baseline predictions. ROC curves use continuous probabilities; AUC is mathematically undefined for profiles with single-class validation targets.
+
+Figure 3: SHAP beeswarm summary for the final CLSI-Adapt model trained on the Average learner profile. Feature attributions indicate model reliance on observable behavioral signals (e.g., window_error_rate, streak_incorrect); they should not be interpreted causally.
+
+Figure 4: Causal learning curve for CLSI-Adapt on the Average profile using strictly historical training observations (N = 50 to 500) and temporally subsequent validation observations (max(train_time) < min(val_time)).
+
+Figure 5: Model performance benchmark comparison of CLSI-Adapt, Rule-Based CLSI, and BKT across learner profiles on common out-of-fold evaluation samples. BKT is evaluated as a mastery/struggle proxy rather than a direct cognitive-load detector. Undefined metrics (NaN) are omitted from aggregate calculations rather than zero-filled.
