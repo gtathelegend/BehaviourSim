@@ -172,7 +172,7 @@ def plot_architecture(output_path: Path) -> None:
             ),
         )
 
-    ax.set_title("Figure 1: CLSI-Adapt Simulator Architecture & Pipeline Flow", fontsize=12, fontweight="bold", pad=15)
+    ax.set_title("CLSI-Adapt Simulator Architecture & Pipeline Flow", fontsize=12, fontweight="bold", pad=15)
     plt.tight_layout()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -310,7 +310,7 @@ def plot_roc_curves(
     ax_pooled.grid(True)
     ax_pooled.legend(loc="lower right", fontsize=8.0)
 
-    plt.suptitle("Figure 2: Receiver Operating Characteristic (ROC) Curves by Learner Profile", fontsize=13, fontweight="bold", y=1.01)
+    plt.suptitle("Receiver Operating Characteristic (ROC) Curves by Learner Profile", fontsize=13, fontweight="bold", y=1.01)
     plt.tight_layout()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -367,14 +367,14 @@ def plot_shap_summary(
     plot_shap_summary_impl(
         shap_values,
         X_final,
-        title=f"Figure 3. SHAP Summary for the Average Learner Profile",
+        title="SHAP Summary for the Average Learner Profile",
         show=False,
         save_path=output_path,
     )
     plot_shap_summary_impl(
         shap_values,
         X_final,
-        title=f"Figure 3. SHAP Summary for the Average Learner Profile",
+        title="SHAP Summary for the Average Learner Profile",
         show=False,
         save_path=output_path.with_suffix(".png"),
     )
@@ -496,8 +496,6 @@ def plot_learning_curve(
             label=f"CLSI-Adapt Validation ROC AUC ({PRETTY_NAMES.get(profile, profile)})",
             zorder=3,
         )
-        for x_val, y_val in zip(evaluated_sizes, aucs):
-            ax.annotate(f"{y_val:.3f}", (x_val, y_val), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8, zorder=4)
     else:
         ax.text(
             0.5, 0.5,
@@ -506,7 +504,7 @@ def plot_learning_curve(
         )
 
     ax.set_title(
-        f"Figure 4. Temporal Learning Curve for CLSI-Adapt (Average Profile)",
+        "Temporal Learning Curve for CLSI-Adapt (Average Profile)",
         fontsize=12, fontweight="bold",
     )
     ax.set_xlabel("Historical Training Set Size ($N$)")
@@ -623,7 +621,7 @@ def plot_model_comparison(
         ha="center", fontsize=8.5, style="italic", color="#555555"
     )
 
-    plt.suptitle("Figure 5. Model Comparison on the Common OOF Evaluation Set", fontsize=12.5, fontweight="bold", y=1.02)
+    plt.suptitle("Model Comparison on the Common OOF Evaluation Set", fontsize=12.5, fontweight="bold", y=1.02)
     plt.tight_layout()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
