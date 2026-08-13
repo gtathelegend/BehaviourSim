@@ -1,20 +1,39 @@
 \begin{table}[ht]
 \centering
-\begin{tabular}{lllllllll}
+\begin{tabular}{llllllllllll}
 \toprule
-Profile & Model & AUC & Precision & Recall & F1 & $N$ & $N_{pos}$ & $N_{neg}$ \\
+Profile & Model & Subset & AUC & Precision & Recall & F1 & $N_{exp}$ & $N_{pred}$ & $N_{miss}$ & $N_{pos}$ & $N_{neg}$ \\
 \midrule
-Fast-Accurate & CLSI-Adapt & NaN & 0.000 & 0.000 & 0.000 & 24 & 0 & 24 \\
-Fast-Accurate & Rule-Based CLSI & 0.216 & 0.012 & 0.500 & 0.024 & 97 & 2 & 95 \\
-Fast-Accurate & BKT & 0.000 & 0.000 & 0.000 & 0.000 & 97 & 2 & 95 \\
-Fast-Inaccurate & Rule-Based CLSI & NaN & 0.000 & 0.000 & 0.000 & 97 & 0 & 97 \\
-Fast-Inaccurate & BKT & NaN & 0.000 & 0.000 & 0.000 & 97 & 0 & 97 \\
-Slow-Accurate & Rule-Based CLSI & 0.031 & 0.000 & 0.000 & 0.000 & 97 & 1 & 96 \\
-Slow-Accurate & BKT & 0.083 & 0.000 & 0.000 & 0.000 & 97 & 1 & 96 \\
-Slow-Inaccurate & Rule-Based CLSI & NaN & 0.000 & 0.000 & 0.000 & 97 & 0 & 97 \\
-Slow-Inaccurate & BKT & NaN & 0.000 & 0.000 & 0.000 & 97 & 0 & 97 \\
-Average & Rule-Based CLSI & NaN & 0.000 & 0.000 & 0.000 & 97 & 0 & 97 \\
-Average & BKT & NaN & 0.000 & 0.000 & 0.000 & 97 & 0 & 97 \\
+Fast-Accurate & CLSI-Adapt & Model-Native & 0.965 & 0.438 & 0.906 & 0.590 & 9,970 & 8,100 & 1,870 & 381 & 7,719 \\
+Fast-Accurate & Rule-Based CLSI & Model-Native & 0.118 & 0.013 & 0.207 & 0.024 & 9,970 & 9,970 & 0 & 468 & 9,502 \\
+Fast-Accurate & BKT & Model-Native & 0.076 & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 468 & 9,502 \\
+Fast-Accurate & CLSI-Adapt & Common OOF Subset & 0.965 & 0.438 & 0.906 & 0.590 & 8,100 & 8,100 & 0 & 381 & 7,719 \\
+Fast-Accurate & Rule-Based CLSI & Common OOF Subset & 0.112 & 0.012 & 0.197 & 0.023 & 8,100 & 8,100 & 0 & 381 & 7,719 \\
+Fast-Accurate & BKT & Common OOF Subset & 0.079 & 0.000 & 0.000 & 0.000 & 8,100 & 8,100 & 0 & 381 & 7,719 \\
+Fast-Inaccurate & CLSI-Adapt & Model-Native & NaN & 0.000 & 0.000 & 0.000 & 9,970 & 3,240 & 6,730 & 0 & 3,240 \\
+Fast-Inaccurate & Rule-Based CLSI & Model-Native & 0.012 & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 3 & 9,967 \\
+Fast-Inaccurate & BKT & Model-Native & 0.035 & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 3 & 9,967 \\
+Fast-Inaccurate & CLSI-Adapt & Common OOF Subset & NaN & 0.000 & 0.000 & 0.000 & 3,240 & 3,240 & 0 & 0 & 3,240 \\
+Fast-Inaccurate & Rule-Based CLSI & Common OOF Subset & NaN & 0.000 & 0.000 & 0.000 & 3,240 & 3,240 & 0 & 0 & 3,240 \\
+Fast-Inaccurate & BKT & Common OOF Subset & NaN & 0.000 & 0.000 & 0.000 & 3,240 & 3,240 & 0 & 0 & 3,240 \\
+Slow-Accurate & CLSI-Adapt & Model-Native & 0.976 & 0.464 & 0.952 & 0.624 & 9,970 & 8,100 & 1,870 & 310 & 7,790 \\
+Slow-Accurate & Rule-Based CLSI & Model-Native & 0.118 & 0.012 & 0.242 & 0.023 & 9,970 & 9,970 & 0 & 389 & 9,581 \\
+Slow-Accurate & BKT & Model-Native & 0.052 & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 389 & 9,581 \\
+Slow-Accurate & CLSI-Adapt & Common OOF Subset & 0.976 & 0.464 & 0.952 & 0.624 & 8,100 & 8,100 & 0 & 310 & 7,790 \\
+Slow-Accurate & Rule-Based CLSI & Common OOF Subset & 0.119 & 0.012 & 0.245 & 0.023 & 8,100 & 8,100 & 0 & 310 & 7,790 \\
+Slow-Accurate & BKT & Common OOF Subset & 0.047 & 0.000 & 0.000 & 0.000 & 8,100 & 8,100 & 0 & 310 & 7,790 \\
+Slow-Inaccurate & CLSI-Adapt & Model-Native & NaN & NaN & NaN & NaN & 9,970 & 0 & 9,970 & 0 & 0 \\
+Slow-Inaccurate & Rule-Based CLSI & Model-Native & NaN & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 0 & 9,970 \\
+Slow-Inaccurate & BKT & Model-Native & NaN & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 0 & 9,970 \\
+Slow-Inaccurate & CLSI-Adapt & Common OOF Subset & NaN & NaN & NaN & NaN & 0 & 0 & 0 & 0 & 0 \\
+Slow-Inaccurate & Rule-Based CLSI & Common OOF Subset & NaN & NaN & NaN & NaN & 0 & 0 & 0 & 0 & 0 \\
+Slow-Inaccurate & BKT & Common OOF Subset & NaN & NaN & NaN & NaN & 0 & 0 & 0 & 0 & 0 \\
+Average & CLSI-Adapt & Model-Native & 0.967 & 0.494 & 0.800 & 0.611 & 9,970 & 8,100 & 1,870 & 55 & 8,045 \\
+Average & Rule-Based CLSI & Model-Native & 0.080 & 0.002 & 0.288 & 0.005 & 9,970 & 9,970 & 0 & 73 & 9,897 \\
+Average & BKT & Model-Native & 0.019 & 0.000 & 0.000 & 0.000 & 9,970 & 9,970 & 0 & 73 & 9,897 \\
+Average & CLSI-Adapt & Common OOF Subset & 0.967 & 0.494 & 0.800 & 0.611 & 8,100 & 8,100 & 0 & 55 & 8,045 \\
+Average & Rule-Based CLSI & Common OOF Subset & 0.088 & 0.002 & 0.291 & 0.004 & 8,100 & 8,100 & 0 & 55 & 8,045 \\
+Average & BKT & Common OOF Subset & 0.018 & 0.000 & 0.000 & 0.000 & 8,100 & 8,100 & 0 & 55 & 8,045 \\
 \bottomrule
 \end{tabular}
 \end{table}

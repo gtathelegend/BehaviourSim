@@ -1,45 +1,81 @@
 \begin{table}[ht]
 \centering
-\begin{tabular}{llll}
+\begin{tabular}{llllll}
 \toprule
-Aggregation Type & Model & Metric & Value \\
+Aggregation Type & Model & Subset & Metric & Value & $N_{prof}$ \\
 \midrule
-Pooled & CLSI-Adapt & auc & NaN \\
-Pooled & CLSI-Adapt & precision & 0.000 \\
-Pooled & CLSI-Adapt & recall & 0.000 \\
-Pooled & CLSI-Adapt & f1 & 0.000 \\
-Across-Profile Mean & CLSI-Adapt & auc & NaN \\
-Across-Profile Std & CLSI-Adapt & auc & NaN \\
-Across-Profile Mean & CLSI-Adapt & precision & 0.000 \\
-Across-Profile Std & CLSI-Adapt & precision & 0.000 \\
-Across-Profile Mean & CLSI-Adapt & recall & 0.000 \\
-Across-Profile Std & CLSI-Adapt & recall & 0.000 \\
-Across-Profile Mean & CLSI-Adapt & f1 & 0.000 \\
-Across-Profile Std & CLSI-Adapt & f1 & 0.000 \\
-Pooled & Rule-Based CLSI & auc & 0.108 \\
-Pooled & Rule-Based CLSI & precision & 0.002 \\
-Pooled & Rule-Based CLSI & recall & 0.333 \\
-Pooled & Rule-Based CLSI & f1 & 0.005 \\
-Across-Profile Mean & Rule-Based CLSI & auc & 0.124 \\
-Across-Profile Std & Rule-Based CLSI & auc & 0.092 \\
-Across-Profile Mean & Rule-Based CLSI & precision & 0.002 \\
-Across-Profile Std & Rule-Based CLSI & precision & 0.005 \\
-Across-Profile Mean & Rule-Based CLSI & recall & 0.100 \\
-Across-Profile Std & Rule-Based CLSI & recall & 0.200 \\
-Across-Profile Mean & Rule-Based CLSI & f1 & 0.005 \\
-Across-Profile Std & Rule-Based CLSI & f1 & 0.010 \\
-Pooled & BKT & auc & 0.013 \\
-Pooled & BKT & precision & 0.000 \\
-Pooled & BKT & recall & 0.000 \\
-Pooled & BKT & f1 & 0.000 \\
-Across-Profile Mean & BKT & auc & 0.042 \\
-Across-Profile Std & BKT & auc & 0.042 \\
-Across-Profile Mean & BKT & precision & 0.000 \\
-Across-Profile Std & BKT & precision & 0.000 \\
-Across-Profile Mean & BKT & recall & 0.000 \\
-Across-Profile Std & BKT & recall & 0.000 \\
-Across-Profile Mean & BKT & f1 & 0.000 \\
-Across-Profile Std & BKT & f1 & 0.000 \\
+Pooled & CLSI-Adapt & Model-Native & auc & 0.976 & 4 \\
+Pooled & CLSI-Adapt & Model-Native & precision & 0.452 & 4 \\
+Pooled & CLSI-Adapt & Model-Native & recall & 0.917 & 4 \\
+Pooled & CLSI-Adapt & Model-Native & f1 & 0.605 & 4 \\
+Across-Profile Mean & CLSI-Adapt & Model-Native & auc & 0.969 & 3 \\
+Across-Profile Std & CLSI-Adapt & Model-Native & auc & 0.005 & 3 \\
+Across-Profile Mean & CLSI-Adapt & Model-Native & precision & 0.349 & 4 \\
+Across-Profile Std & CLSI-Adapt & Model-Native & precision & 0.202 & 4 \\
+Across-Profile Mean & CLSI-Adapt & Model-Native & recall & 0.664 & 4 \\
+Across-Profile Std & CLSI-Adapt & Model-Native & recall & 0.387 & 4 \\
+Across-Profile Mean & CLSI-Adapt & Model-Native & f1 & 0.456 & 4 \\
+Across-Profile Std & CLSI-Adapt & Model-Native & f1 & 0.264 & 4 \\
+Pooled & Rule-Based CLSI & Model-Native & auc & 0.074 & 5 \\
+Pooled & Rule-Based CLSI & Model-Native & precision & 0.005 & 5 \\
+Pooled & Rule-Based CLSI & Model-Native & recall & 0.227 & 5 \\
+Pooled & Rule-Based CLSI & Model-Native & f1 & 0.010 & 5 \\
+Across-Profile Mean & Rule-Based CLSI & Model-Native & auc & 0.082 & 4 \\
+Across-Profile Std & Rule-Based CLSI & Model-Native & auc & 0.043 & 4 \\
+Across-Profile Mean & Rule-Based CLSI & Model-Native & precision & 0.006 & 5 \\
+Across-Profile Std & Rule-Based CLSI & Model-Native & precision & 0.006 & 5 \\
+Across-Profile Mean & Rule-Based CLSI & Model-Native & recall & 0.147 & 5 \\
+Across-Profile Std & Rule-Based CLSI & Model-Native & recall & 0.123 & 5 \\
+Across-Profile Mean & Rule-Based CLSI & Model-Native & f1 & 0.011 & 5 \\
+Across-Profile Std & Rule-Based CLSI & Model-Native & f1 & 0.011 & 5 \\
+Pooled & BKT & Model-Native & auc & 0.031 & 5 \\
+Pooled & BKT & Model-Native & precision & 0.000 & 5 \\
+Pooled & BKT & Model-Native & recall & 0.000 & 5 \\
+Pooled & BKT & Model-Native & f1 & 0.000 & 5 \\
+Across-Profile Mean & BKT & Model-Native & auc & 0.045 & 4 \\
+Across-Profile Std & BKT & Model-Native & auc & 0.021 & 4 \\
+Across-Profile Mean & BKT & Model-Native & precision & 0.000 & 5 \\
+Across-Profile Std & BKT & Model-Native & precision & 0.000 & 5 \\
+Across-Profile Mean & BKT & Model-Native & recall & 0.000 & 5 \\
+Across-Profile Std & BKT & Model-Native & recall & 0.000 & 5 \\
+Across-Profile Mean & BKT & Model-Native & f1 & 0.000 & 5 \\
+Across-Profile Std & BKT & Model-Native & f1 & 0.000 & 5 \\
+Pooled & CLSI-Adapt & Common OOF Subset & auc & 0.976 & 4 \\
+Pooled & CLSI-Adapt & Common OOF Subset & precision & 0.452 & 4 \\
+Pooled & CLSI-Adapt & Common OOF Subset & recall & 0.917 & 4 \\
+Pooled & CLSI-Adapt & Common OOF Subset & f1 & 0.605 & 4 \\
+Across-Profile Mean & CLSI-Adapt & Common OOF Subset & auc & 0.969 & 3 \\
+Across-Profile Std & CLSI-Adapt & Common OOF Subset & auc & 0.005 & 3 \\
+Across-Profile Mean & CLSI-Adapt & Common OOF Subset & precision & 0.349 & 4 \\
+Across-Profile Std & CLSI-Adapt & Common OOF Subset & precision & 0.202 & 4 \\
+Across-Profile Mean & CLSI-Adapt & Common OOF Subset & recall & 0.664 & 4 \\
+Across-Profile Std & CLSI-Adapt & Common OOF Subset & recall & 0.387 & 4 \\
+Across-Profile Mean & CLSI-Adapt & Common OOF Subset & f1 & 0.456 & 4 \\
+Across-Profile Std & CLSI-Adapt & Common OOF Subset & f1 & 0.264 & 4 \\
+Pooled & Rule-Based CLSI & Common OOF Subset & auc & 0.091 & 4 \\
+Pooled & Rule-Based CLSI & Common OOF Subset & precision & 0.007 & 4 \\
+Pooled & Rule-Based CLSI & Common OOF Subset & recall & 0.224 & 4 \\
+Pooled & Rule-Based CLSI & Common OOF Subset & f1 & 0.014 & 4 \\
+Across-Profile Mean & Rule-Based CLSI & Common OOF Subset & auc & 0.106 & 3 \\
+Across-Profile Std & Rule-Based CLSI & Common OOF Subset & auc & 0.013 & 3 \\
+Across-Profile Mean & Rule-Based CLSI & Common OOF Subset & precision & 0.007 & 4 \\
+Across-Profile Std & Rule-Based CLSI & Common OOF Subset & precision & 0.006 & 4 \\
+Across-Profile Mean & Rule-Based CLSI & Common OOF Subset & recall & 0.183 & 4 \\
+Across-Profile Std & Rule-Based CLSI & Common OOF Subset & recall & 0.111 & 4 \\
+Across-Profile Mean & Rule-Based CLSI & Common OOF Subset & f1 & 0.013 & 4 \\
+Across-Profile Std & Rule-Based CLSI & Common OOF Subset & f1 & 0.011 & 4 \\
+Pooled & BKT & Common OOF Subset & auc & 0.042 & 4 \\
+Pooled & BKT & Common OOF Subset & precision & 0.000 & 4 \\
+Pooled & BKT & Common OOF Subset & recall & 0.000 & 4 \\
+Pooled & BKT & Common OOF Subset & f1 & 0.000 & 4 \\
+Across-Profile Mean & BKT & Common OOF Subset & auc & 0.048 & 3 \\
+Across-Profile Std & BKT & Common OOF Subset & auc & 0.025 & 3 \\
+Across-Profile Mean & BKT & Common OOF Subset & precision & 0.000 & 4 \\
+Across-Profile Std & BKT & Common OOF Subset & precision & 0.000 & 4 \\
+Across-Profile Mean & BKT & Common OOF Subset & recall & 0.000 & 4 \\
+Across-Profile Std & BKT & Common OOF Subset & recall & 0.000 & 4 \\
+Across-Profile Mean & BKT & Common OOF Subset & f1 & 0.000 & 4 \\
+Across-Profile Std & BKT & Common OOF Subset & f1 & 0.000 & 4 \\
 \bottomrule
 \end{tabular}
 \end{table}
