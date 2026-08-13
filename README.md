@@ -130,7 +130,7 @@ $$\text{mean}(\text{accuracy}[t-3 \dots t]) \ge 0.75 \quad \text{AND} \quad \tex
 
 1. **CLSI-Adapt**: Profile-specific XGBoost classifiers trained with scale-position-weight balancing and 5-fold temporal forward-chaining cross-validation (`TimeSeriesSplit`). Inner CV grid search optimizes hyperparameters (`max_depth` $\in \{3,5,7\}$, `learning_rate` $\in \{0.01, 0.1\}$).
 2. **Rule-Based CLSI**: Parameter-free composite heuristic index:
-   $$\text{CLSI} = \frac{0.50 \cdot \text{acc} + 0.25 \cdot (1 - \text{NRT}) + 0.15 \cdot (1 - \text{wer}) + 0.10 \cdot (1 - \text{retries}_{\text{norm}})}{1.0} - 0.10 \cdot \text{help}_{\text{requested}}$$
+   $$\text{CLSI} = \frac{0.50 \cdot \text{acc} + 0.25 \cdot (1 - \text{NRT}) + 0.15 \cdot (1 - \text{wer}) + 0.10 \cdot (1 - \text{retries-norm})}{1.0} - 0.10 \cdot \text{help-requested}$$
    Predicts overload when $\text{CLSI} < 0.40$.
 3. **BKT Baseline**: Standard Bayesian Knowledge Tracing ($P(L_0)=0.3, P(T)=0.1, P(G)=0.2, P(S)=0.1$, reset per learner). Predicts struggle when mastery $P(L_t) < 0.30$.
 
@@ -141,7 +141,7 @@ $$\text{mean}(\text{accuracy}[t-3 \dots t]) \ge 0.75 \quad \text{AND} \quad \tex
 To prevent data leakage across temporal sequences:
 * `TimeSeriesSplit(n_splits=5)` is applied across unique interaction time steps.
 * Strict temporal forward-chaining invariant:
-  $$\max(\text{train}_{\text{pos}}) < \min(\text{val}_{\text{pos}}) \quad \text{and} \quad \text{train}_{\text{times}} \cap \text{val}_{\text{times}} = \emptyset$$
+  $$\max(\text{train-pos}) < \min(\text{val-pos}) \quad \text{and} \quad \text{train-times} \cap \text{val-times} = \emptyset$$
 * All learners at a given interaction time step are assigned to the same temporal partition, eliminating simultaneous-time leakage.
 
 ---
