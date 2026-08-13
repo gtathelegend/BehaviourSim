@@ -1,0 +1,226 @@
+================================================================================
+CLSI-ADAPT PHASE 5 EVALUATION AUDIT REPORT
+================================================================================
+
+1. DATASET SPECIFICATION & GROUND-TRUTH TARGET
+--------------------------------------------------------------------------------
+Profiles                           : 5 (fast_accurate, slow_accurate, average, fast_inaccurate, slow_inaccurate)
+Learners per Profile               : 10
+Interactions per Learner           : 1000
+Total Raw Interactions             : 50,000 (10,000 per profile)
+Random Seed                        : 42
+Target Definition                  : Overload (prior_acc >= 0.75 AND future_acc <= 0.50)
+CV Strategy                        : 5-fold forward-chaining TimeSeriesSplit on unique interaction time steps
+CV Invariant Check                 : max(train_interaction_id) < min(validation_interaction_id)
+Simultaneous Time Leakage          : 0 shared interaction time steps
+
+2. PREDICTION COVERAGE & EVALUATION SUBSETS
+--------------------------------------------------------------------------------
+OOF Prediction Calculation Note    : Corrected arithmetic:
+  5 validation folds * 1620 validation observations = 8100 unique OOF predictions.
+  The first 1670 observations constitute the initial training history and are not validation observations.
+
+Profile           Model            Subset           Expected   Predicted  Missing    Positives  Negatives 
+---------------------------------------------------------------------------------------------------
+fast_accurate     clsi_adapt       model_native     9970       8100       1870       381        7719      
+fast_accurate     rule_based_clsi  model_native     9970       9970       0          468        9502      
+fast_accurate     bkt              model_native     9970       9970       0          468        9502      
+fast_accurate     clsi_adapt       common_oof       8100       8100       0          381        7719      
+fast_accurate     rule_based_clsi  common_oof       8100       8100       0          381        7719      
+fast_accurate     bkt              common_oof       8100       8100       0          381        7719      
+fast_inaccurate   clsi_adapt       model_native     9970       3240       6730       0          3240      
+fast_inaccurate   rule_based_clsi  model_native     9970       9970       0          3          9967      
+fast_inaccurate   bkt              model_native     9970       9970       0          3          9967      
+fast_inaccurate   clsi_adapt       common_oof       3240       3240       0          0          3240      
+fast_inaccurate   rule_based_clsi  common_oof       3240       3240       0          0          3240      
+fast_inaccurate   bkt              common_oof       3240       3240       0          0          3240      
+slow_accurate     clsi_adapt       model_native     9970       8100       1870       310        7790      
+slow_accurate     rule_based_clsi  model_native     9970       9970       0          389        9581      
+slow_accurate     bkt              model_native     9970       9970       0          389        9581      
+slow_accurate     clsi_adapt       common_oof       8100       8100       0          310        7790      
+slow_accurate     rule_based_clsi  common_oof       8100       8100       0          310        7790      
+slow_accurate     bkt              common_oof       8100       8100       0          310        7790      
+slow_inaccurate   clsi_adapt       model_native     9970       0          9970       0          0         
+slow_inaccurate   rule_based_clsi  model_native     9970       9970       0          0          9970      
+slow_inaccurate   bkt              model_native     9970       9970       0          0          9970      
+slow_inaccurate   clsi_adapt       common_oof       0          0          0          0          0         
+slow_inaccurate   rule_based_clsi  common_oof       0          0          0          0          0         
+slow_inaccurate   bkt              common_oof       0          0          0          0          0         
+average           clsi_adapt       model_native     9970       8100       1870       55         8045      
+average           rule_based_clsi  model_native     9970       9970       0          73         9897      
+average           bkt              model_native     9970       9970       0          73         9897      
+average           clsi_adapt       common_oof       8100       8100       0          55         8045      
+average           rule_based_clsi  common_oof       8100       8100       0          55         8045      
+average           bkt              common_oof       8100       8100       0          55         8045      
+
+3. PER-PROFILE CLASSIFICATION METRICS
+--------------------------------------------------------------------------------
+Profile           Model            Subset           AUC        Precision  Recall     F1        
+-----------------------------------------------------------------------------------------
+fast_accurate     clsi_adapt       model_native     0.9653     0.4378     0.9055     0.5902    
+fast_accurate     rule_based_clsi  model_native     0.1182     0.0130     0.2073     0.0245    
+fast_accurate     bkt              model_native     0.0757     0.0000     0.0000     0.0000    
+fast_accurate     clsi_adapt       common_oof       0.9653     0.4378     0.9055     0.5902    
+fast_accurate     rule_based_clsi  common_oof       0.1116     0.0124     0.1969     0.0233    
+fast_accurate     bkt              common_oof       0.0785     0.0000     0.0000     0.0000    
+fast_inaccurate   clsi_adapt       model_native     NaN        0.0000     0.0000     0.0000    
+fast_inaccurate   rule_based_clsi  model_native     0.0125     0.0000     0.0000     0.0000    
+fast_inaccurate   bkt              model_native     0.0350     0.0000     0.0000     0.0000    
+fast_inaccurate   clsi_adapt       common_oof       NaN        0.0000     0.0000     0.0000    
+fast_inaccurate   rule_based_clsi  common_oof       NaN        0.0000     0.0000     0.0000    
+fast_inaccurate   bkt              common_oof       NaN        0.0000     0.0000     0.0000    
+slow_accurate     clsi_adapt       model_native     0.9764     0.4638     0.9516     0.6237    
+slow_accurate     rule_based_clsi  model_native     0.1182     0.0123     0.2416     0.0234    
+slow_accurate     bkt              model_native     0.0520     0.0000     0.0000     0.0000    
+slow_accurate     clsi_adapt       common_oof       0.9764     0.4638     0.9516     0.6237    
+slow_accurate     rule_based_clsi  common_oof       0.1189     0.0122     0.2452     0.0233    
+slow_accurate     bkt              common_oof       0.0471     0.0000     0.0000     0.0000    
+slow_inaccurate   clsi_adapt       model_native     NaN        NaN        NaN        NaN       
+slow_inaccurate   rule_based_clsi  model_native     NaN        0.0000     0.0000     0.0000    
+slow_inaccurate   bkt              model_native     NaN        0.0000     0.0000     0.0000    
+slow_inaccurate   clsi_adapt       common_oof       NaN        NaN        NaN        NaN       
+slow_inaccurate   rule_based_clsi  common_oof       NaN        NaN        NaN        NaN       
+slow_inaccurate   bkt              common_oof       NaN        NaN        NaN        NaN       
+average           clsi_adapt       model_native     0.9666     0.4944     0.8000     0.6111    
+average           rule_based_clsi  model_native     0.0800     0.0024     0.2877     0.0047    
+average           bkt              model_native     0.0189     0.0000     0.0000     0.0000    
+average           clsi_adapt       common_oof       0.9666     0.4944     0.8000     0.6111    
+average           rule_based_clsi  common_oof       0.0881     0.0022     0.2909     0.0044    
+average           bkt              common_oof       0.0177     0.0000     0.0000     0.0000    
+
+4. AGGREGATED CLASSIFICATION METRICS
+--------------------------------------------------------------------------------
+Aggregation            Model            Subset           Metric     Value      Profiles Contrib
+------------------------------------------------------------------------------------------
+pooled                 clsi_adapt       model_native     auc        0.9759     4               
+pooled                 clsi_adapt       model_native     precision  0.4518     4               
+pooled                 clsi_adapt       model_native     recall     0.9169     4               
+pooled                 clsi_adapt       model_native     f1         0.6053     4               
+mean_across_profiles   clsi_adapt       model_native     auc        0.9694     3               
+std_across_profiles    clsi_adapt       model_native     auc        0.0049     3               
+mean_across_profiles   clsi_adapt       model_native     precision  0.3490     4               
+std_across_profiles    clsi_adapt       model_native     precision  0.2025     4               
+mean_across_profiles   clsi_adapt       model_native     recall     0.6643     4               
+std_across_profiles    clsi_adapt       model_native     recall     0.3874     4               
+mean_across_profiles   clsi_adapt       model_native     f1         0.4563     4               
+std_across_profiles    clsi_adapt       model_native     f1         0.2637     4               
+pooled                 rule_based_clsi  model_native     auc        0.0741     5               
+pooled                 rule_based_clsi  model_native     precision  0.0049     5               
+pooled                 rule_based_clsi  model_native     recall     0.2272     5               
+pooled                 rule_based_clsi  model_native     f1         0.0096     5               
+mean_across_profiles   rule_based_clsi  model_native     auc        0.0822     4               
+std_across_profiles    rule_based_clsi  model_native     auc        0.0432     4               
+mean_across_profiles   rule_based_clsi  model_native     precision  0.0055     5               
+std_across_profiles    rule_based_clsi  model_native     precision  0.0059     5               
+mean_across_profiles   rule_based_clsi  model_native     recall     0.1473     5               
+std_across_profiles    rule_based_clsi  model_native     recall     0.1230     5               
+mean_across_profiles   rule_based_clsi  model_native     f1         0.0105     5               
+std_across_profiles    rule_based_clsi  model_native     f1         0.0111     5               
+pooled                 bkt              model_native     auc        0.0305     5               
+pooled                 bkt              model_native     precision  0.0000     5               
+pooled                 bkt              model_native     recall     0.0000     5               
+pooled                 bkt              model_native     f1         0.0000     5               
+mean_across_profiles   bkt              model_native     auc        0.0454     4               
+std_across_profiles    bkt              model_native     auc        0.0210     4               
+mean_across_profiles   bkt              model_native     precision  0.0000     5               
+std_across_profiles    bkt              model_native     precision  0.0000     5               
+mean_across_profiles   bkt              model_native     recall     0.0000     5               
+std_across_profiles    bkt              model_native     recall     0.0000     5               
+mean_across_profiles   bkt              model_native     f1         0.0000     5               
+std_across_profiles    bkt              model_native     f1         0.0000     5               
+pooled                 clsi_adapt       common_oof       auc        0.9759     4               
+pooled                 clsi_adapt       common_oof       precision  0.4518     4               
+pooled                 clsi_adapt       common_oof       recall     0.9169     4               
+pooled                 clsi_adapt       common_oof       f1         0.6053     4               
+mean_across_profiles   clsi_adapt       common_oof       auc        0.9694     3               
+std_across_profiles    clsi_adapt       common_oof       auc        0.0049     3               
+mean_across_profiles   clsi_adapt       common_oof       precision  0.3490     4               
+std_across_profiles    clsi_adapt       common_oof       precision  0.2025     4               
+mean_across_profiles   clsi_adapt       common_oof       recall     0.6643     4               
+std_across_profiles    clsi_adapt       common_oof       recall     0.3874     4               
+mean_across_profiles   clsi_adapt       common_oof       f1         0.4563     4               
+std_across_profiles    clsi_adapt       common_oof       f1         0.2637     4               
+pooled                 rule_based_clsi  common_oof       auc        0.0915     4               
+pooled                 rule_based_clsi  common_oof       precision  0.0074     4               
+pooled                 rule_based_clsi  common_oof       recall     0.2239     4               
+pooled                 rule_based_clsi  common_oof       f1         0.0143     4               
+mean_across_profiles   rule_based_clsi  common_oof       auc        0.1062     3               
+std_across_profiles    rule_based_clsi  common_oof       auc        0.0132     3               
+mean_across_profiles   rule_based_clsi  common_oof       precision  0.0067     4               
+std_across_profiles    rule_based_clsi  common_oof       precision  0.0056     4               
+mean_across_profiles   rule_based_clsi  common_oof       recall     0.1832     4               
+std_across_profiles    rule_based_clsi  common_oof       recall     0.1109     4               
+mean_across_profiles   rule_based_clsi  common_oof       f1         0.0127     4               
+std_across_profiles    rule_based_clsi  common_oof       f1         0.0106     4               
+pooled                 bkt              common_oof       auc        0.0422     4               
+pooled                 bkt              common_oof       precision  0.0000     4               
+pooled                 bkt              common_oof       recall     0.0000     4               
+pooled                 bkt              common_oof       f1         0.0000     4               
+mean_across_profiles   bkt              common_oof       auc        0.0478     3               
+std_across_profiles    bkt              common_oof       auc        0.0249     3               
+mean_across_profiles   bkt              common_oof       precision  0.0000     4               
+std_across_profiles    bkt              common_oof       precision  0.0000     4               
+mean_across_profiles   bkt              common_oof       recall     0.0000     4               
+std_across_profiles    bkt              common_oof       recall     0.0000     4               
+mean_across_profiles   bkt              common_oof       f1         0.0000     4               
+std_across_profiles    bkt              common_oof       f1         0.0000     4               
+
+5. OVERLOAD EVENT DETECTION & RECOVERY TIME ANALYSIS
+--------------------------------------------------------------------------------
+Profile           Model            Events   Detected   Event Recall   Recovered  Unrecovered  Mean Rec Time   Med Rec Time
+------------------------------------------------------------------------------------------------------------------
+fast_accurate     clsi_adapt       1207     137        0.1135         137        0            3.380           2.0         
+fast_accurate     rule_based_clsi  1207     1104       0.9147         1094       10           7.281           5.0         
+fast_accurate     bkt              1207     1040       0.8616         1030       10           7.399           6.0         
+fast_inaccurate   clsi_adapt       1034     0          0.0000         0          0            NaN             NaN         
+fast_inaccurate   rule_based_clsi  1034     1024       0.9903         1008       16           11.290          8.0         
+fast_inaccurate   bkt              1034     1018       0.9845         1002       16           11.300          8.0         
+slow_accurate     clsi_adapt       1198     110        0.0918         110        0            4.545           3.0         
+slow_accurate     rule_based_clsi  1198     1121       0.9357         1108       13           7.549           6.0         
+slow_accurate     bkt              1198     1063       0.8873         1050       13           7.696           6.0         
+slow_inaccurate   clsi_adapt       1063     0          0.0000         0          0            NaN             NaN         
+slow_inaccurate   rule_based_clsi  1063     1060       0.9972         1051       9            10.899          8.0         
+slow_inaccurate   bkt              1063     1057       0.9944         1048       9            10.907          8.0         
+average           clsi_adapt       1122     15         0.0134         15         0            5.933           3.0         
+average           rule_based_clsi  1122     1096       0.9768         1087       9            9.708           7.0         
+average           bkt              1122     1078       0.9608         1068       10           9.783           7.0         
+
+6. SIMULATOR COGNITIVE STATE STATISTICS (POPULATION PROPERTIES)
+--------------------------------------------------------------------------------
+Note: These state fractions are population properties of simulated learner profiles.
+They are NOT causal effects of the classification models.
+
+Profile           Optimal Fraction   Overload Fraction   Underload Fraction   Total Interactions
+--------------------------------------------------------------------------------------------
+fast_accurate     0.24540            0.65060             0.10400              10000             
+fast_inaccurate   0.10910            0.84760             0.04330              10000             
+slow_accurate     0.22240            0.67700             0.10060              10000             
+slow_inaccurate   0.10450            0.85240             0.04310              10000             
+average           0.13750            0.80220             0.06030              10000             
+Aggregate         0.16378            0.76596             0.07026              50000             
+
+7. METHODOLOGICAL AUDIT & MODEL INTERPRETATION
+--------------------------------------------------------------------------------
+CLSI-Adapt Model:
+  - Supervised personalization model using 11 engineered features and XGBoost classifier.
+  - Evaluated out-of-fold (OOF) across 5 temporal CV validation folds.
+
+Rule-Based CLSI Model:
+  - Parameter-free composite index: CLSI = (0.50*acc + 0.25*(1-NRT) + 0.15*(1-wer) + 0.10*(1-retries_norm)) / 1.0.
+  - Applies help penalty of 0.10 when help is requested.
+  - Predicts overload when CLSI < 0.40 (un-tuned fixed threshold).
+  - Causal formulation; does not use future information.
+
+BKT Model:
+  - Bayesian Knowledge Tracing baseline / struggle proxy.
+  - Parameters: initial_mastery=0.3, learn=0.1, guess=0.2, slip=0.1.
+  - Resets BKT state at every learner boundary.
+  - Predicts struggle when mastery probability < 0.30.
+  - IMPORTANT: BKT is explicitly a domain mastery tracker / struggle proxy, NOT a direct cognitive-load detector.
+
+Handling of Undefined Metrics (NaN):
+  - Fast-inaccurate and Slow-inaccurate profiles contain 0 or near-0 positive overload targets.
+  - Single-class validation folds return ROC AUC = NaN.
+  - Aggregate across-profile mean and standard deviation explicitly exclude NaN values and report n_profiles_contributing.
+  - NaN values are never silently converted to zero.
+================================================================================

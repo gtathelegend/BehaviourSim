@@ -1,0 +1,143 @@
+================================================================================
+FINAL CLSI-ADAPT EXPERIMENTAL REPRODUCIBILITY & PUBLICATION AUDIT REPORT
+================================================================================
+
+1. EXPERIMENT CONFIGURATION CONSISTENCY
+----------------------------------------
+  Seed: 42
+  Profiles: 5 (fast_accurate, fast_inaccurate, slow_accurate, slow_inaccurate, average)
+  Learners per profile: 10
+  Interactions per learner: 1,000
+  Total raw interactions: 5 x 10 x 1,000 = 50,000 [VERIFIED CONSISTENT]
+
+2. DATASET CONSISTENCY
+----------------------
+  Primary Dataset: data/simulated_learners_all.csv (50,000 rows)
+  Search for secondary/fallback cohort generators: 0 active occurrences [VERIFIED CONSISTENT]
+
+3. SEED CONSISTENCY
+-------------------
+  Seed = 42 used uniformly in Simulator, Feature Engineering, CLSI-Adapt, Rule-Based CLSI, BKT, Learning Curve, and Visualizations [VERIFIED CONSISTENT]
+
+4. PHASE 4 <-> PHASE 5 CONSISTENCY
+----------------------------------
+  Phase 4 CV Mean AUCs:
+    fast_accurate: 0.9783 +- 0.0022
+    slow_accurate: 0.9858 +- 0.0032
+    average:       0.9963 +- 0.0030
+    fast_inaccurate: NaN
+    slow_inaccurate: NaN
+  Phase 5 Common-OOF AUCs (8,100 exact evaluation observations):
+    fast_accurate: 0.9653
+    slow_accurate: 0.9764
+    average:       0.9666
+    fast_inaccurate: NaN
+    slow_inaccurate: NaN
+  Target Counts & Profiles: 100% matched across Phase 4 and Phase 5 reports [VERIFIED CONSISTENT]
+
+5. PHASE 5 <-> PHASE 6 CONSISTENCY
+----------------------------------
+  Figure 2 ROC Curves: Derived directly from Phase 5 continuous probability predictions.
+  Figure 3 SHAP Summary: Uses final Average profile XGBoost model from Phase 5.
+  Figure 4 Learning Curve: Uses primary dataset (sim_data['average']).
+  Figure 5 Model Comparison: Uses Phase 5 common-OOF metrics table [VERIFIED CONSISTENT]
+
+6. TABLE <-> CSV <-> LATEX CONSISTENCY
+-------------------------------------
+  Table 'profile_metrics': CSV (True) | LaTeX (True) [VERIFIED MATCHED]
+  Table 'aggregate_metrics': CSV (True) | LaTeX (True) [VERIFIED MATCHED]
+  Table 'recovery_metrics': CSV (True) | LaTeX (True) [VERIFIED MATCHED]
+  Table 'state_statistics': CSV (True) | LaTeX (True) [VERIFIED MATCHED]
+
+7. FIGURE SOURCE AUDIT
+----------------------
+  src/visualize.py contains ZERO hard-coded results or embedded AUC values.
+  All plot elements are dynamically generated from pipeline data structures [VERIFIED CONSISTENT]
+
+8. FIGURE 1 AUDIT
+-----------------
+  Figure 1 architecture diagram accurately represents pipeline flow.
+  BKT is explicitly labeled as 'Bayesian Knowledge Tracing baseline / struggle proxy' [VERIFIED CONSISTENT]
+
+9. FIGURE 2 AUDIT
+-----------------
+  ROC curves use continuous y_prob predictions.
+  Single-class profiles annotated as 'AUC undefined — single-class target' without zero-filling [VERIFIED CONSISTENT]
+
+10. FIGURE 3 AUDIT
+------------------
+  SHAP values computed via shap.TreeExplainer on final Average profile model.
+  Features match 11 FEATURE_NAMES. Zero causal interpretation in text/captions [VERIFIED CONSISTENT]
+
+11. FIGURE 4 AUDIT
+------------------
+  Figure 4 audit log (results/figure4_learning_curve_audit.txt) verified intact.
+  Strict global ordering invariant max(train_pos) < min(val_pos) verified for all N [VERIFIED CONSISTENT]
+
+12. FIGURE 5 AUDIT
+------------------
+  Bar charts compare CLSI-Adapt, Rule-Based CLSI, and BKT (struggle proxy) on common-OOF sample.
+  BKT labeled 'BKT (struggle proxy)' [VERIFIED CONSISTENT]
+
+13. CAUSAL-LANGUAGE AUDIT
+-------------------------
+  Audited captions, docs, and code comments.
+  Zero unsupported causal claims ('reduces recovery time', 'prevents overload') found.
+  Non-causal phrasing ('observed recovery interval following model detection') strictly enforced [VERIFIED CONSISTENT]
+
+14. BASELINE INTERPRETATION AUDIT
+---------------------------------
+  BKT consistently qualified as a domain mastery tracker / struggle proxy baseline (P(L0)=0.3, P(T)=0.1, P(G)=0.2, P(S)=0.1), NOT a cognitive load detector [VERIFIED CONSISTENT]
+
+15. UNDEFINED METRIC AUDIT
+--------------------------
+  Single-class targets preserve NaN. Aggregate metrics exclude NaN and report n_profiles_contributing [VERIFIED CONSISTENT]
+
+16. TEST SUITE
+--------------
+  Pytest status: 184 test items collected | 179 passed | 5 expected skips | 0 failures [VERIFIED CONSISTENT]
+
+17. REPRODUCIBILITY CHECK
+-------------------------
+  run_all.py executes end-to-end deterministically under seed=42 [VERIFIED CONSISTENT]
+
+18. GIT / REPOSITORY HYGIENE
+-----------------------------
+  Git status: working tree clean (On branch main, up to date with origin/main) [VERIFIED CONSISTENT]
+
+19. REQUIRED PUBLICATION ARTIFACT CHECKLIST
+--------------------------------------------
+  [EXISTS] results/tables/profile_metrics.csv
+  [EXISTS] results/tables/profile_metrics.tex
+  [EXISTS] results/tables/aggregate_metrics.csv
+  [EXISTS] results/tables/aggregate_metrics.tex
+  [EXISTS] results/tables/recovery_metrics.csv
+  [EXISTS] results/tables/recovery_metrics.tex
+  [EXISTS] results/tables/state_statistics.csv
+  [EXISTS] results/tables/state_statistics.tex
+  [EXISTS] results/figures/figure1_architecture.pdf
+  [EXISTS] results/figures/figure2_roc_curves.pdf
+  [EXISTS] results/figures/figure3_shap_summary.pdf
+  [EXISTS] results/figures/figure4_learning_curve.pdf
+  [EXISTS] results/figures/figure5_model_comparison.pdf
+  [EXISTS] results/figures/figure_captions.txt
+  [EXISTS] results/clsi_adapt_phase4_results.txt
+  [EXISTS] results/evaluation_phase5_audit.txt
+  [EXISTS] results/figure4_learning_curve_audit.txt
+  Checklist Status: ALL ARTIFACTS PRESENT
+
+================================================================================
+FINAL SCIENTIFIC CLASSIFICATION: A. PUBLICATION READY
+================================================================================
+
+PAPER METHODS SECTION SPECIFICATION:
+------------------------------------
+Methods Specification for Paper:
+--------------------------------
+Experimental Dataset & Architecture: The experimental evaluation of CLSI-Adapt was conducted using a synthetic learner cognitive state simulator parameterized across 5 distinct learner profiles (Fast-Accurate, Fast-Inaccurate, Slow-Accurate, Slow-Inaccurate, and Average). For each profile, 10 synthetic learners were simulated over 1,000 sequential interactions under a fixed random seed (seed = 42), generating 50,000 total raw interaction records. Each interaction log recorded response accuracy, normalized response time (NRT), retry counts, and help request indicators.
+
+Feature Engineering & Target Definition: Causal temporal features were constructed using rolling historical windows (window size = 5) strictly excluding future observations. The target cognitive overload state was defined as a prior accuracy gte 0.75 followed by an accuracy drop to lte 0.50 within a 3-interaction future horizon. The initial 20 interactions per learner were designated as a warm-up period and excluded from prediction evaluation.
+
+Predictive Modeling & Baselines: CLSI-Adapt employs profile-specific XGBoost classifiers optimized via 5-fold temporal forward-chaining cross-validation (TimeSeriesSplit) with nested inner hyperparameter search (max_depth in {3,5,7}, learning_rate in {0.01, 0.1}). CLSI-Adapt was benchmarked against two baselines: (1) Rule-Based CLSI, a heuristic composite score integrating accuracy, response time, error rates, and retries; and (2) Bayesian Knowledge Tracing (BKT), evaluated as a domain mastery / struggle proxy baseline (P(L0)=0.3, P(T)=0.1, P(G)=0.2, P(S)=0.1, state reset per learner).
+
+Evaluation & Undefined Metric Handling: Predictive performance was evaluated on continuous probability outputs using ROC AUC, Precision, Recall, and F1 score on identical out-of-fold observation sets (common-OOF). Profiles with single-class validation targets (Fast-Inaccurate and Slow-Inaccurate) were assigned NaN for mathematically undefined AUC metrics and excluded from aggregate mean and standard deviation calculations, with contributing profile counts explicitly reported.

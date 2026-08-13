@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software or benchmark in your work, please cite it as below."
+title: "CLSI-Adapt Simulator: Adaptive Cognitive Load Detection Framework"
+abstract: "Synthetic Learner Cognitive State Simulator and Adaptive Cognitive Load Detection Benchmark Framework."
+authors:
+  - family-names: "Sharma"
+    given-names: "Vedaang"
+version: "1.0.0"
+date-released: "2026-08-13"
+repository-code: "https://github.com/gtathelegend/CLSI-Adapt-Simulator"
+keywords:
+  - "cognitive load detection"
+  - "adaptive learning"
+  - "bayesian knowledge tracing"
+  - "xgboost"
+  - "educational data mining"

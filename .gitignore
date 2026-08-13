@@ -186,6 +186,7 @@ data/*
 
 results/*
 !results/.gitkeep
+!results/*.txt
 !results/tables/
 !results/tables/.gitkeep
 !results/figures/
