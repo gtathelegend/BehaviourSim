@@ -237,7 +237,7 @@ def plot_roc_curves(
         for model in model_names:
             sub = sub_df_all[(sub_df_all["profile"] == profile) & (sub_df_all["model"] == model)]
             if sub.empty:
-                ax.plot([], [], label=f"{PRETTY_NAMES.get(model, model)}: NaN", color=MODEL_COLORS.get(model, "#333"))
+                ax.plot([], [], label=f"{PRETTY_NAMES.get(model, model)}: AUC N/A", color=MODEL_COLORS.get(model, "#333"))
                 has_single_class = True
                 continue
 
@@ -246,7 +246,7 @@ def plot_roc_curves(
 
             if len(np.unique(y_true)) < 2:
                 has_single_class = True
-                ax.plot([], [], label=f"{PRETTY_NAMES.get(model, model)}: NaN", color=MODEL_COLORS.get(model, "#333"), linestyle=MODEL_STYLES.get(model, "-"))
+                ax.plot([], [], label=f"{PRETTY_NAMES.get(model, model)}: AUC N/A", color=MODEL_COLORS.get(model, "#333"), linestyle=MODEL_STYLES.get(model, "-"))
                 continue
 
             fpr, tpr, _ = roc_curve(y_true, y_prob)
@@ -302,7 +302,7 @@ def plot_roc_curves(
                 lw=2.0,
             )
 
-    ax_pooled.set_title("Pooled (All Evaluation Profiles)", fontsize=11, fontweight="bold")
+    ax_pooled.set_title("Pooled (All Available OOF Predictions)", fontsize=11, fontweight="bold")
     ax_pooled.set_xlabel("False Positive Rate")
     ax_pooled.set_ylabel("True Positive Rate")
     ax_pooled.set_xlim([-0.02, 1.02])
@@ -367,14 +367,14 @@ def plot_shap_summary(
     plot_shap_summary_impl(
         shap_values,
         X_final,
-        title=f"Figure 3: SHAP Feature Importance (Profile: {PRETTY_NAMES.get(profile, profile)})",
+        title=f"Figure 3. SHAP Summary for the Average Learner Profile",
         show=False,
         save_path=output_path,
     )
     plot_shap_summary_impl(
         shap_values,
         X_final,
-        title=f"Figure 3: SHAP Feature Importance (Profile: {PRETTY_NAMES.get(profile, profile)})",
+        title=f"Figure 3. SHAP Summary for the Average Learner Profile",
         show=False,
         save_path=output_path.with_suffix(".png"),
     )
@@ -474,6 +474,17 @@ def plot_learning_curve(
 
     fig, ax = plt.subplots(figsize=(8, 5.5), dpi=150)
 
+    # Visual shading and annotation for N <= 250 (single-class training history)
+    ax.axvspan(30, 275, color="#eaeaea", alpha=0.6, zorder=1)
+    ax.text(
+        152.5, 0.5,
+        "N ≤ 250: single-class training history;\nAUC not estimable",
+        ha="center", va="center",
+        fontsize=9, color="#555555", style="italic",
+        bbox=dict(boxstyle="round,pad=0.4", fc="#ffffff", ec="#cccccc", alpha=0.9),
+        zorder=2,
+    )
+
     if evaluated_sizes:
         ax.plot(
             evaluated_sizes,
@@ -483,9 +494,10 @@ def plot_learning_curve(
             lw=2.0,
             ms=6,
             label=f"CLSI-Adapt Validation ROC AUC ({PRETTY_NAMES.get(profile, profile)})",
+            zorder=3,
         )
         for x_val, y_val in zip(evaluated_sizes, aucs):
-            ax.annotate(f"{y_val:.3f}", (x_val, y_val), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8)
+            ax.annotate(f"{y_val:.3f}", (x_val, y_val), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8, zorder=4)
     else:
         ax.text(
             0.5, 0.5,
@@ -494,11 +506,12 @@ def plot_learning_curve(
         )
 
     ax.set_title(
-        f"Figure 4: Causal Learning Curve (Profile: {PRETTY_NAMES.get(profile, profile)})",
+        f"Figure 4. Temporal Learning Curve for CLSI-Adapt (Average Profile)",
         fontsize=12, fontweight="bold",
     )
     ax.set_xlabel("Historical Training Set Size ($N$)")
     ax.set_ylabel("Validation ROC AUC (Subsequent Observations)")
+    ax.set_xlim([30, 520])
     ax.set_ylim([0.0, 1.05])
     ax.grid(True)
     if evaluated_sizes:
@@ -589,10 +602,10 @@ def plot_model_comparison(
                 lw=0.8,
             )
 
-            # Annotate NaN values explicitly above baseline
+            # Annotate NaN values explicitly above baseline with "Undefined"
             for pos_x, val, is_nan in zip(x + offset, vals, is_nan_list):
                 if is_nan:
-                    ax.text(pos_x, 0.02, "NaN", ha="center", va="bottom", fontsize=7.5, color="#777777", fontweight="bold", rotation=90)
+                    ax.text(pos_x, 0.02, "Undefined", ha="center", va="bottom", fontsize=7.5, color="#777777", fontweight="bold", rotation=90)
 
         ax.set_title(metric_titles[metric], fontsize=11, fontweight="bold")
         ax.set_xticks(x)
@@ -604,7 +617,13 @@ def plot_model_comparison(
             ax.set_ylabel("Metric Score")
             ax.legend(loc="upper left", fontsize=8.5)
 
-    plt.suptitle("Figure 5: Model Benchmark Comparison Across Learner Profiles (Common OOF Subset)", fontsize=12.5, fontweight="bold", y=1.02)
+    fig.text(
+        0.5, 0.005,
+        "Note: Undefined metrics arise from single-class target profiles. Metrics are computed on identical out-of-fold observation windows.",
+        ha="center", fontsize=8.5, style="italic", color="#555555"
+    )
+
+    plt.suptitle("Figure 5. Model Comparison on the Common OOF Evaluation Set", fontsize=12.5, fontweight="bold", y=1.02)
     plt.tight_layout()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -676,24 +695,29 @@ def generate_plots(
     captions_text = (
         "PUBLICATION FIGURE CAPTIONS\n"
         "=========================="
-        "\n\nFigure 1: Complete experimental architecture and pipeline flow for the CLSI-Adapt simulator framework. "
-        "Synthetic learner trajectories pass through temporal feature engineering before evaluation on CLSI-Adapt (XGBoost), "
+        "\n\nFigure 1: Complete experimental architecture and pipeline flow for the CLSI-Adapt simulator framework "
+        "(5 profiles, seed 42, HMM state transitions with log-normal response times). Synthetic learner trajectories "
+        "pass through temporal feature engineering before temporal evaluation on CLSI-Adapt (XGBoost), "
         "Rule-Based CLSI, and Bayesian Knowledge Tracing (BKT). BKT is evaluated as a domain mastery tracker / struggle proxy "
         "rather than a direct cognitive-load detector."
         "\n\nFigure 2: Receiver Operating Characteristic (ROC) curves for overload prediction across synthetic learner profiles "
         "under forward-chaining temporal evaluation. CLSI-Adapt predictions are generated from out-of-fold XGBoost models, "
         "while Rule-Based CLSI and BKT provide baseline predictions. ROC curves use continuous probabilities; AUC is "
-        "mathematically undefined for profiles with single-class validation targets."
+        "mathematically undefined for profiles with single-class validation targets. Panel 6 shows the pooled ROC curve "
+        "across all available out-of-fold predictions."
         "\n\nFigure 3: SHAP beeswarm summary for the final CLSI-Adapt model trained on the Average learner profile. "
-        "Feature attributions indicate model reliance on observable behavioral signals (e.g., window_error_rate, streak_incorrect); "
-        "they should not be interpreted causally."
-        "\n\nFigure 4: Causal learning curve for CLSI-Adapt on the Average profile using strictly historical training observations "
-        "(N = 50 to 500) and temporally subsequent validation observations (max(train_time) < min(val_time))."
+        "Feature attributions describe model feature reliance on observable behavioral signals (e.g., window_error_rate, "
+        "streak_incorrect) and do not represent causal effects."
+        "\n\nFigure 4: Temporal learning curve for CLSI-Adapt on the Average learner profile. Each model is trained "
+        "exclusively on historical observations (N = 50 to 500) and evaluated on strictly subsequent observations "
+        "(max(train_time) < min(val_time)). For N ≤ 250, the training history contains only negative examples "
+        "(single-class training history), so ROC AUC is not estimable. Once positive overload examples enter "
+        "the training history (N ≥ 300), performance rapidly converges."
         "\n\nFigure 5: Model performance benchmark comparison of CLSI-Adapt, Rule-Based CLSI, and BKT across learner profiles "
-        "on common out-of-fold evaluation samples. BKT is evaluated as a mastery/struggle proxy rather than a direct cognitive-load detector. "
-        "Undefined metrics (NaN) are omitted from aggregate calculations rather than zero-filled."
+        "on the Common OOF Evaluation Set. Metrics are computed on identical out-of-fold observation windows for the compared models. "
+        "Undefined metrics arising from single-class target profiles are preserved as undefined rather than zero-filled."
     )
-    with open(captions_file, "w") as f:
+    with open(captions_file, "w", encoding="utf-8") as f:
         f.write(captions_text)
 
     print(f"  Visualizations complete. Figures saved in: {fig_dir}")
