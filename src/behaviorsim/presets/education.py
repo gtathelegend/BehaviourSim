@@ -3,6 +3,8 @@
 Generates reproducible synthetic learner interaction traces with ground-truth cognitive states
 (Optimal, Overload, Underload), performance-dependent state transitions, statistical properties,
 and chronological feature tracking without future data leakage.
+
+Executed through the generic behaviorsim.core simulation engine.
 """
 
 from dataclasses import dataclass
@@ -12,6 +14,13 @@ import numpy as np
 import pandas as pd
 
 from src.config import Config, default_config
+
+from behaviorsim.core.feature import FeatureDistribution
+from behaviorsim.core.profile import Profile
+from behaviorsim.core.state import State
+from behaviorsim.core.simulator import FeatureEvaluationContext, Simulator
+from behaviorsim.core.transition import HistoryContext, TransitionRule
+from behaviorsim.core.utils import derive_learner_seed
 
 
 @dataclass
@@ -82,8 +91,15 @@ LEARNER_PROFILES: Dict[str, LearnerProfile] = {
     ),
 }
 
-# State definitions
-STATES = ["Optimal", "Overload", "Underload"]
+# Generic Core State instances for Education Domain
+EDUCATION_CORE_STATES = [
+    State("Optimal", description="Optimal cognitive load state"),
+    State("Overload", description="High cognitive load / struggle state"),
+    State("Underload", description="Low cognitive load / boredom state"),
+]
+
+# Legacy string state definitions exported for API compatibility
+STATES: List[str] = [s.name for s in EDUCATION_CORE_STATES]
 
 # Base Hidden Markov transition matrix P(state_t | state_{t-1})
 BASE_TRANSITION_MATRIX: Dict[str, Dict[str, float]] = {
@@ -92,10 +108,160 @@ BASE_TRANSITION_MATRIX: Dict[str, Dict[str, float]] = {
     "Underload": {"Optimal": 0.30, "Overload": 0.10, "Underload": 0.60},
 }
 
+# Numerical 2D array representation of base transition matrix aligned with EDUCATION_CORE_STATES
+EDUCATION_TRANSITION_MATRIX = np.array(
+    [
+        [0.70, 0.15, 0.15],
+        [0.30, 0.60, 0.10],
+        [0.30, 0.10, 0.60],
+    ]
+)
+
 
 def _logistic(x: float) -> float:
     """Standard logistic function."""
     return 1.0 / (1.0 + np.exp(-x))
+
+
+def build_education_transition_rules() -> List[TransitionRule]:
+    """Construct domain transition rules for education performance-dependent overrides."""
+
+    def overload_override_condition(ctx: HistoryContext) -> bool:
+        recent_acc = ctx.get_recent("accuracy", 5)
+        return len(recent_acc) >= 5 and float(np.mean(recent_acc)) < 0.4
+
+    def underload_override_condition(ctx: HistoryContext) -> bool:
+        recent_acc = ctx.get_recent("accuracy", 5)
+        recent_nrt = ctx.get_recent("nrt", 5)
+        return (
+            len(recent_acc) >= 5
+            and float(np.mean(recent_acc)) == 1.0
+            and len(recent_nrt) >= 5
+            and float(np.mean(recent_nrt)) < 0.4
+        )
+
+    return [
+        TransitionRule(
+            condition=overload_override_condition,
+            target_state="Overload",
+            probability=0.70,
+        ),
+        TransitionRule(
+            condition=underload_override_condition,
+            target_state="Underload",
+            probability=0.60,
+        ),
+    ]
+
+
+def _sample_accuracy(eval_ctx: FeatureEvaluationContext) -> int:
+    """Sample item accuracy based on IRT ability theta, difficulty, and state factor."""
+    difficulty = eval_ctx.history.get_recent("difficulty", 1)[-1]
+    state = eval_ctx.state
+    profile: LearnerProfile = eval_ctx.profile.metadata["learner_profile"]
+
+    base_p = _logistic(profile.theta - difficulty)
+    if state == "Optimal":
+        state_factor = 1.0
+    elif state == "Underload":
+        state_factor = 0.90
+    else:  # Overload
+        state_factor = 1.0 - profile.overload_accuracy_drop_factor
+
+    prob_correct = float(np.clip(base_p * state_factor, 0.0, 1.0))
+    return int(eval_ctx.rng.binomial(1, prob_correct))
+
+
+def _sample_nrt(eval_ctx: FeatureEvaluationContext) -> float:
+    """Sample lognormal response time and return normalized response time (NRT)."""
+    difficulty = eval_ctx.history.get_recent("difficulty", 1)[-1]
+    state = eval_ctx.state
+    profile: LearnerProfile = eval_ctx.profile.metadata["learner_profile"]
+
+    if state == "Optimal":
+        mu_rt = np.log(profile.rt_mean_optimal * (1.0 + 0.05 * (difficulty - 3)))
+        sigma_rt = profile.rt_sd_optimal
+    elif state == "Overload":
+        mu_rt = np.log(profile.rt_mean_optimal * 1.4 * (1.0 + 0.05 * (difficulty - 3)))
+        sigma_rt = profile.rt_sd_optimal * 1.25
+    else:  # Underload
+        mu_rt = np.log(profile.rt_mean_optimal * profile.underload_rt_factor)
+        sigma_rt = profile.rt_sd_optimal
+
+    raw_rt = max(0.1, float(eval_ctx.rng.lognormal(mean=mu_rt, sigma=sigma_rt)))
+    eval_ctx.history.record("raw_rt", raw_rt)
+
+    nrt = max(0.01, float(raw_rt / profile.rt_mean_optimal))
+    return nrt
+
+
+def _sample_retries(eval_ctx: FeatureEvaluationContext) -> int:
+    """Sample retry count based on accuracy and cognitive state."""
+    accuracy = eval_ctx.history.get_recent("accuracy", 1)[-1]
+    state = eval_ctx.state
+    rng = eval_ctx.rng
+
+    if accuracy == 0 and state == "Overload":
+        if rng.random() < 0.40:
+            return int(rng.choice([1, 2, 3]))
+        return 0
+    else:
+        if accuracy == 0:
+            return int(rng.choice([0, 1]))
+        return 0
+
+
+def _sample_help(eval_ctx: FeatureEvaluationContext) -> int:
+    """Sample help request flag based on cognitive state."""
+    state = eval_ctx.state
+    profile: LearnerProfile = eval_ctx.profile.metadata["learner_profile"]
+
+    if state == "Overload":
+        p_help = profile.help_prob_overload
+    elif state == "Optimal":
+        p_help = profile.help_prob_optimal
+    else:  # Underload
+        p_help = 0.02
+
+    return int(eval_ctx.rng.random() < p_help)
+
+
+def _sample_confidence(eval_ctx: FeatureEvaluationContext) -> int:
+    """Sample confidence score (1-5) based on state-dependent categorical distribution."""
+    state = eval_ctx.state
+    rng = eval_ctx.rng
+
+    if state == "Overload":
+        probs = [0.40, 0.35, 0.15, 0.07, 0.03]
+    elif state == "Optimal":
+        probs = [0.05, 0.15, 0.50, 0.20, 0.10]
+    else:  # Underload
+        probs = [0.02, 0.08, 0.20, 0.40, 0.30]
+
+    return int(rng.choice([1, 2, 3, 4, 5], p=probs))
+
+
+def create_education_core_profile(learner_profile: LearnerProfile) -> Profile:
+    """Construct generic Profile abstraction from an education LearnerProfile."""
+    rules = build_education_transition_rules()
+    state_emissions = {
+        state_name: {
+            "difficulty": FeatureDistribution("uniform_discrete", {"items": [1, 2, 3, 4, 5]}),
+            "accuracy": _sample_accuracy,
+            "nrt": _sample_nrt,
+            "retries": _sample_retries,
+            "help_requested": _sample_help,
+            "confidence": _sample_confidence,
+        }
+        for state_name in STATES
+    }
+    return Profile(
+        name=learner_profile.name,
+        state_emissions=state_emissions,
+        transition_matrix=EDUCATION_TRANSITION_MATRIX,
+        transition_rules=rules,
+        metadata={"learner_profile": learner_profile},
+    )
 
 
 def simulate_learner(
@@ -105,7 +271,7 @@ def simulate_learner(
     seed: Optional[int] = None,
     config: Config = default_config,
 ) -> pd.DataFrame:
-    """Simulate interaction log for a single independent synthetic learner.
+    """Simulate interaction log for a single independent synthetic learner via core Simulator.
 
     Args:
         profile_name: Name of the learner profile (must be one of LEARNER_PROFILES keys).
@@ -123,104 +289,40 @@ def simulate_learner(
         )
 
     n_interactions = num_interactions if num_interactions is not None else config.num_interactions_per_learner
-    profile = LEARNER_PROFILES[profile_name]
+    learner_profile = LEARNER_PROFILES[profile_name]
     effective_seed = seed if seed is not None else config.seed
-    rng = np.random.default_rng(effective_seed)
     window_size = config.feature_window_size
 
-    # Simulation tracking containers (clean state reset for learner)
-    states: List[str] = []
-    difficulties: List[int] = []
-    accuracies: List[int] = []
-    nrts: List[float] = []
-    raw_rts: List[float] = []
-    retries_list: List[int] = []
-    help_list: List[int] = []
-    confidence_list: List[int] = []
+    core_profile = create_education_core_profile(learner_profile)
+    simulator = Simulator(
+        states=EDUCATION_CORE_STATES,
+        profile=core_profile,
+        initial_state="Optimal",
+    )
+
+    # Execute simulation using core Simulator engine
+    sim_df = simulator.simulate(num_interactions=n_interactions, seed=effective_seed)
+
+    # Post-process derived metrics to build exact education schema
+    accuracies = sim_df["accuracy"].to_numpy(dtype=int)
+    nrts = sim_df["nrt"].to_numpy(dtype=float)
+
     streak_correct_list: List[int] = []
     streak_incorrect_list: List[int] = []
     window_error_rate_list: List[float] = []
     nrt_variance_list: List[float] = []
     session_time_list: List[float] = []
 
-    current_state = "Optimal"
     current_streak_correct = 0
     current_streak_incorrect = 0
     cumulative_session_time = 0.0
 
+    # Extract raw_rt values from simulation history trace implicitly reconstructed
+    raw_rts = nrts * learner_profile.rt_mean_optimal
+
     for i in range(n_interactions):
-        # 1. State Transition Determination
-        # Precedence & Mutual Exclusivity Documentation:
-        # Rule 1 (Overload Override): Triggered if recent 5-item mean accuracy < 0.4 (probability 0.70).
-        # Rule 2 (Underload Override): Triggered if recent 5-item accuracy == 1.0 AND recent 5-item mean NRT < 0.4 (probability 0.60).
-        # Mutual Exclusivity: Since mean accuracy < 0.4 and mean accuracy == 1.0 are mutually exclusive conditions,
-        # Rule 1 and Rule 2 can never trigger simultaneously.
-        # Insufficient History: If i < 5, overrides cannot be evaluated over 5 items; base HMM transition matrix is used.
-        if i >= 5:
-            last_5_acc = accuracies[-5:]
-            last_5_nrt = nrts[-5:]
-            mean_acc_5 = float(np.mean(last_5_acc))
-            mean_nrt_5 = float(np.mean(last_5_nrt))
-
-            if mean_acc_5 < 0.4:
-                if rng.random() < 0.70:
-                    current_state = "Overload"
-                else:
-                    trans_probs = BASE_TRANSITION_MATRIX[current_state]
-                    current_state = str(
-                        rng.choice(
-                            list(trans_probs.keys()), p=list(trans_probs.values())
-                        )
-                    )
-            elif mean_acc_5 == 1.0 and mean_nrt_5 < 0.4:
-                if rng.random() < 0.60:
-                    current_state = "Underload"
-                else:
-                    trans_probs = BASE_TRANSITION_MATRIX[current_state]
-                    current_state = str(
-                        rng.choice(
-                            list(trans_probs.keys()), p=list(trans_probs.values())
-                        )
-                    )
-            else:
-                trans_probs = BASE_TRANSITION_MATRIX[current_state]
-                current_state = str(
-                    rng.choice(
-                        list(trans_probs.keys()), p=list(trans_probs.values())
-                    )
-                )
-        else:
-            if i > 0:
-                trans_probs = BASE_TRANSITION_MATRIX[current_state]
-                current_state = str(
-                    rng.choice(
-                        list(trans_probs.keys()), p=list(trans_probs.values())
-                    )
-                )
-            else:
-                current_state = "Optimal"
-
-        states.append(current_state)
-
-        # 2. Difficulty (Uniform discrete sampling from {1, 2, 3, 4, 5})
-        difficulty = int(rng.choice([1, 2, 3, 4, 5]))
-        difficulties.append(difficulty)
-
-        # 3. Accuracy
-        base_p = _logistic(profile.theta - difficulty)
-        if current_state == "Optimal":
-            state_factor = 1.0
-        elif current_state == "Underload":
-            state_factor = 0.90  # Explicit slight drop due to carelessness/boredom
-        else:  # Overload
-            state_factor = 1.0 - profile.overload_accuracy_drop_factor
-
-        prob_correct = float(np.clip(base_p * state_factor, 0.0, 1.0))
-        accuracy = int(rng.binomial(1, prob_correct))
-        accuracies.append(accuracy)
-
-        # Update Streaks
-        if accuracy == 1:
+        acc = accuracies[i]
+        if acc == 1:
             current_streak_correct += 1
             current_streak_incorrect = 0
         else:
@@ -230,62 +332,10 @@ def simulate_learner(
         streak_correct_list.append(current_streak_correct)
         streak_incorrect_list.append(current_streak_incorrect)
 
-        # 4. Response Time (NRT)
-        # Log-normal distribution scaled relative to profile.rt_mean_optimal
-        if current_state == "Optimal":
-            mu_rt = np.log(profile.rt_mean_optimal * (1.0 + 0.05 * (difficulty - 3)))
-            sigma_rt = profile.rt_sd_optimal
-        elif current_state == "Overload":
-            mu_rt = np.log(profile.rt_mean_optimal * 1.4 * (1.0 + 0.05 * (difficulty - 3)))
-            sigma_rt = profile.rt_sd_optimal * 1.25
-        else:  # Underload
-            mu_rt = np.log(profile.rt_mean_optimal * profile.underload_rt_factor)
-            sigma_rt = profile.rt_sd_optimal
-
-        raw_rt = max(0.1, float(rng.lognormal(mean=mu_rt, sigma=sigma_rt)))
-        raw_rts.append(raw_rt)
-
-        nrt = max(0.01, float(raw_rt / profile.rt_mean_optimal))
-        nrts.append(nrt)
-
+        raw_rt = raw_rts[i]
         cumulative_session_time += raw_rt
         session_time_list.append(cumulative_session_time)
 
-        # 5. Retries
-        if accuracy == 0 and current_state == "Overload":
-            if rng.random() < 0.40:
-                retries = int(rng.choice([1, 2, 3]))
-            else:
-                retries = 0
-        else:
-            if accuracy == 0:
-                retries = int(rng.choice([0, 1]))
-            else:
-                retries = 0
-        retries_list.append(retries)
-
-        # 6. Help Requests
-        if current_state == "Overload":
-            p_help = profile.help_prob_overload
-        elif current_state == "Optimal":
-            p_help = profile.help_prob_optimal
-        else:  # Underload
-            p_help = 0.02
-        help_requested = int(rng.random() < p_help)
-        help_list.append(help_requested)
-
-        # 7. Confidence (1-5)
-        if current_state == "Overload":
-            probs = [0.40, 0.35, 0.15, 0.07, 0.03]
-        elif current_state == "Optimal":
-            probs = [0.05, 0.15, 0.50, 0.20, 0.10]
-        else:  # Underload
-            probs = [0.02, 0.08, 0.20, 0.40, 0.30]
-
-        confidence = int(rng.choice([1, 2, 3, 4, 5], p=probs))
-        confidence_list.append(confidence)
-
-        # 8. Chronological Windowed Metrics (within learner)
         window_start = max(0, i + 1 - window_size)
         window_accs = accuracies[window_start : i + 1]
         window_nrts = nrts[window_start : i + 1]
@@ -299,20 +349,20 @@ def simulate_learner(
             nrt_var = 0.0
         nrt_variance_list.append(nrt_var)
 
-    # Build final output DataFrame
+    # Construct final DataFrame matching exact historical schema
     df = pd.DataFrame(
         {
             "profile": profile_name,
             "learner_id": learner_id,
             "interaction_id": np.arange(1, n_interactions + 1, dtype=int),
-            "state": states,
-            "difficulty": difficulties,
+            "state": sim_df["state"].to_list(),
+            "difficulty": sim_df["difficulty"].astype(int).to_list(),
             "accuracy": accuracies,
             "nrt": nrts,
             "window_error_rate": window_error_rate_list,
-            "retries": retries_list,
-            "help_requested": help_list,
-            "confidence": confidence_list,
+            "retries": sim_df["retries"].astype(int).to_list(),
+            "help_requested": sim_df["help_requested"].astype(int).to_list(),
+            "confidence": sim_df["confidence"].astype(int).to_list(),
             "streak_correct": streak_correct_list,
             "streak_incorrect": streak_incorrect_list,
             "nrt_variance": nrt_variance_list,
@@ -347,8 +397,7 @@ def simulate_all_profiles(
     for p_idx, profile_name in enumerate(LEARNER_PROFILES.keys()):
         learner_dfs: List[pd.DataFrame] = []
         for l_idx in range(1, n_learners + 1):
-            # Profile and learner specific seed derivation ensures independence and determinism
-            learner_seed = seed + p_idx * 10000 + (l_idx - 1) * 100
+            learner_seed = derive_learner_seed(seed, p_idx, l_idx)
             df_learner = simulate_learner(
                 profile_name=profile_name,
                 num_interactions=n_interactions,
