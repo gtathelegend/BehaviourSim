@@ -9,7 +9,7 @@ Executed through the generic behaviorsim.core simulation engine.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 
@@ -264,6 +264,46 @@ def create_education_core_profile(learner_profile: LearnerProfile) -> Profile:
     )
 
 
+def create_education_simulator(
+    profile: Union[str, LearnerProfile] = "average",
+    initial_state: str = "Optimal",
+    **kwargs: Any,
+) -> Simulator:
+    """Factory creating a generic Simulator configured with Education domain specifications.
+
+    Args:
+        profile: Learner profile name (str) or LearnerProfile instance. Defaults to "average".
+        initial_state: Name of initial state. Defaults to "Optimal".
+        **kwargs: Additional parameters passed to Simulator (or 'profile_name').
+
+    Returns:
+        Configured Simulator instance for the education domain.
+    """
+    if "profile_name" in kwargs:
+        profile = kwargs.pop("profile_name")
+
+    if isinstance(profile, str):
+        if profile not in LEARNER_PROFILES:
+            raise ValueError(
+                f"Unknown profile '{profile}'. Must be one of {list(LEARNER_PROFILES.keys())}"
+            )
+        lp = LEARNER_PROFILES[profile]
+    elif isinstance(profile, LearnerProfile):
+        lp = profile
+    else:
+        raise TypeError(
+            f"profile must be a str or LearnerProfile, got {type(profile).__name__}."
+        )
+
+    core_profile = create_education_core_profile(lp)
+    return Simulator(
+        states=EDUCATION_CORE_STATES,
+        profile=core_profile,
+        initial_state=initial_state,
+        **kwargs,
+    )
+
+
 def simulate_learner(
     profile_name: str,
     num_interactions: Optional[int] = None,
@@ -293,12 +333,7 @@ def simulate_learner(
     effective_seed = seed if seed is not None else config.seed
     window_size = config.feature_window_size
 
-    core_profile = create_education_core_profile(learner_profile)
-    simulator = Simulator(
-        states=EDUCATION_CORE_STATES,
-        profile=core_profile,
-        initial_state="Optimal",
-    )
+    simulator = create_education_simulator(profile=learner_profile, initial_state="Optimal")
 
     # Execute simulation using core Simulator engine
     sim_df = simulator.simulate(num_interactions=n_interactions, seed=effective_seed)
