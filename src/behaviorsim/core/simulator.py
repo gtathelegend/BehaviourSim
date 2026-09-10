@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, TYPE_CHECKING, Union
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from behaviorsim.config import SimulationConfig
 
 from behaviorsim.core.feature import FeatureDistribution
 from behaviorsim.core.profile import Profile
@@ -315,3 +319,84 @@ class Simulator:
             sequence_dfs.append(df_seq)
 
         return pd.concat(sequence_dfs, ignore_index=True)
+
+    def generate(
+        self,
+        num_interactions: int = 100,
+        num_sequences: int = 1,
+        seed: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Generate synthetic behavioral traces across one or more sequences.
+
+        Ergonomic public alias for simulate().
+
+        Args:
+            num_interactions: Number of interactions per sequence. Must be >= 1.
+            num_sequences: Number of independent sequences to simulate. Must be >= 1.
+            seed: Base random seed for deterministic execution.
+
+        Returns:
+            pd.DataFrame containing interaction traces across all generated sequences.
+        """
+        return self.simulate(
+            num_interactions=num_interactions,
+            num_sequences=num_sequences,
+            seed=seed,
+        )
+
+    @classmethod
+    def from_preset(cls, name: str, **kwargs: Any) -> Any:
+        """Construct a Simulator (or domain simulator) from a registered preset name.
+
+        Args:
+            name: Deterministic preset identifier (e.g., 'education').
+            **kwargs: Additional parameters passed to the preset factory.
+
+        Returns:
+            Simulator or compatible high-level simulation object.
+
+        Raises:
+            TypeError: If name is not a string.
+            ValueError: If preset name is not registered.
+        """
+        from behaviorsim.presets import get_preset
+
+        factory = get_preset(name)
+        return factory(**kwargs)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Union[SimulationConfig, Mapping[str, Any], str, Path],
+        profile_name: Optional[str] = None,
+    ) -> Simulator:
+        """Construct a Simulator instance from a configuration specification.
+
+        Args:
+            config: SimulationConfig instance, configuration mapping/dict, or path to a YAML/JSON file.
+            profile_name: Optional profile name to select from multi-profile configs.
+                If None, defaults to the first profile in the configuration.
+
+        Returns:
+            Configured Simulator instance.
+
+        Raises:
+            TypeError: If config is not a SimulationConfig, Mapping, or str/Path.
+            ValueError: If configuration validation or profile selection fails.
+            FileNotFoundError: If a file path is provided that does not exist.
+        """
+        from behaviorsim.config import SimulationConfig, load_config, parse_config
+
+        if isinstance(config, SimulationConfig):
+            cfg = config
+        elif isinstance(config, Mapping):
+            cfg = parse_config(config)
+        elif isinstance(config, (str, Path)):
+            cfg = load_config(config)
+        else:
+            raise TypeError(
+                f"Unsupported config type: {type(config).__name__}. "
+                "Expected SimulationConfig, Mapping, or file path (str/Path)."
+            )
+
+        return cfg.to_core(profile_name=profile_name)
