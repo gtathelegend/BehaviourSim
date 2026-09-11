@@ -343,12 +343,21 @@ class ProfileConfig:
     transition_matrix: Optional[Union[np.ndarray, Sequence[Sequence[float]]]] = None
     transition_rules: Optional[Sequence[TransitionRuleConfig]] = None
     metadata: Optional[Mapping[str, Any]] = None
+    probability: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("profile 'name' must be a non-empty string")
         if not isinstance(self.state_emissions, Mapping):
             raise TypeError("profile 'state_emissions' must be a mapping")
+        if self.probability is not None:
+            if isinstance(self.probability, bool) or not isinstance(self.probability, (int, float)):
+                raise TypeError(f"profile probability must be numeric, got {type(self.probability).__name__}")
+            p_val = float(self.probability)
+            if not math.isfinite(p_val):
+                raise ValueError("profile probability must be a finite number")
+            if not (0.0 <= p_val <= 1.0):
+                raise ValueError(f"profile probability must be between 0 and 1, got {self.probability}")
 
 
 @dataclass
@@ -359,6 +368,7 @@ class SimulationRunConfig:
     num_sequences: int = 1
     seed: Optional[int] = None
     initial_state: Optional[str] = None
+    profile_distribution: Optional[Mapping[str, float]] = None
 
     def __post_init__(self) -> None:
         if (
@@ -379,6 +389,8 @@ class SimulationRunConfig:
             not isinstance(self.initial_state, str) or not self.initial_state.strip()
         ):
             raise ValueError("initial_state must be a non-empty string or None")
+        if self.profile_distribution is not None and not isinstance(self.profile_distribution, Mapping):
+            raise TypeError("profile_distribution must be a mapping")
 
 
 @dataclass
@@ -390,63 +402,94 @@ class SimulationConfig:
     profiles: Sequence[ProfileConfig]
     simulation: SimulationRunConfig
     transition_matrix: Optional[Union[np.ndarray, Sequence[Sequence[float]]]] = None
+    profile_distribution: Optional[Mapping[str, float]] = None
 
-    def to_core(self, profile_name: Optional[str] = None) -> Simulator:
+    def to_core(
+        self,
+        profile_name: Optional[str] = None,
+        profile_distribution: Optional[Mapping[str, float]] = None,
+    ) -> Simulator:
         """Instantiate a generic Simulator from this configuration.
 
         Args:
-            profile_name: Name of the profile to use. If None, the first profile
-                in self.profiles is selected.
+            profile_name: Optional name of single profile to select. If provided, creates
+                a single-profile Simulator regardless of other profiles.
+            profile_distribution: Optional mapping of profile probabilities for mixture simulation.
+                If None, uses distribution defined in configuration if present, or defaults to
+                the first profile in self.profiles.
 
         Returns:
             Configured Simulator instance.
         """
         core_states = [State(name=s.name, description=s.description) for s in self.states]
 
-        if profile_name is not None:
-            matching = [p for p in self.profiles if p.name == profile_name]
-            if not matching:
-                raise ValueError(f"Profile '{profile_name}' not found in configuration.")
-            selected_prof = matching[0]
-        else:
-            selected_prof = self.profiles[0]
+        def _build_core_profile(p: ProfileConfig) -> Profile:
+            core_state_emissions: Dict[str, Dict[str, FeatureDistribution]] = {}
+            for s_name, feat_map in p.state_emissions.items():
+                core_state_emissions[s_name] = {}
+                for f_name, dist_cfg in feat_map.items():
+                    core_state_emissions[s_name][f_name] = FeatureDistribution(
+                        distribution_type=dist_cfg.distribution,
+                        params=dist_cfg.params,
+                    )
 
-        core_state_emissions: Dict[str, Dict[str, FeatureDistribution]] = {}
-        for s_name, feat_map in selected_prof.state_emissions.items():
-            core_state_emissions[s_name] = {}
-            for f_name, dist_cfg in feat_map.items():
-                core_state_emissions[s_name][f_name] = FeatureDistribution(
-                    distribution_type=dist_cfg.distribution,
-                    params=dist_cfg.params,
-                )
+            core_rules = None
+            if p.transition_rules:
+                core_rules = [
+                    TransitionRule(
+                        condition=compile_condition(r.condition),
+                        target_state=r.target_state,
+                        probability=r.probability,
+                    )
+                    for r in p.transition_rules
+                ]
 
-        core_rules = None
-        if selected_prof.transition_rules:
-            core_rules = [
-                TransitionRule(
-                    condition=compile_condition(r.condition),
-                    target_state=r.target_state,
-                    probability=r.probability,
-                )
-                for r in selected_prof.transition_rules
-            ]
+            prof_matrix = None
+            if p.transition_matrix is not None:
+                prof_matrix = np.asarray(p.transition_matrix, dtype=float)
 
-        prof_matrix = None
-        if selected_prof.transition_matrix is not None:
-            prof_matrix = np.asarray(selected_prof.transition_matrix, dtype=float)
-
-        core_profile = Profile(
-            name=selected_prof.name,
-            state_emissions=core_state_emissions,
-            transition_matrix=prof_matrix,
-            transition_rules=core_rules,
-            metadata=selected_prof.metadata,
-        )
+            return Profile(
+                name=p.name,
+                state_emissions=core_state_emissions,
+                transition_matrix=prof_matrix,
+                transition_rules=core_rules,
+                metadata=p.metadata,
+                probability=p.probability,
+            )
 
         top_matrix = None
         if self.transition_matrix is not None:
             top_matrix = np.asarray(self.transition_matrix, dtype=float)
 
+        # 1. Explicit profile_name selection takes precedence (single-profile mode)
+        if profile_name is not None:
+            matching = [p for p in self.profiles if p.name == profile_name]
+            if not matching:
+                raise ValueError(f"Profile '{profile_name}' not found in configuration.")
+            core_profile = _build_core_profile(matching[0])
+            return Simulator(
+                states=core_states,
+                profile=core_profile,
+                transition_matrix=top_matrix,
+                initial_state=self.simulation.initial_state,
+            )
+
+        # 2. Multi-profile mixture resolution
+        active_dist = profile_distribution or self.profile_distribution or self.simulation.profile_distribution
+        has_profile_probs = len(self.profiles) > 1 and all(p.probability is not None for p in self.profiles)
+
+        if active_dist is not None or has_profile_probs:
+            core_profiles = [_build_core_profile(p) for p in self.profiles]
+            return Simulator(
+                states=core_states,
+                profiles=core_profiles,
+                profile_distribution=active_dist,
+                transition_matrix=top_matrix,
+                initial_state=self.simulation.initial_state,
+            )
+
+        # 3. Default fallback to first profile (backward-compatible)
+        core_profile = _build_core_profile(self.profiles[0])
         return Simulator(
             states=core_states,
             profile=core_profile,
@@ -513,11 +556,40 @@ def parse_config(raw_data: Mapping[str, Any]) -> SimulationConfig:
     if initial_state is not None and initial_state not in seen_states:
         raise ValueError(f"initial_state '{initial_state}' does not exist in configured states")
 
+    # Optional profile distribution from simulation or root config
+    raw_dist = raw_data.get("profile_distribution")
+    if raw_dist is None and isinstance(raw_sim, Mapping):
+        raw_dist = raw_sim.get("profile_distribution")
+
+    parsed_dist: Optional[Dict[str, float]] = None
+    if raw_dist is not None:
+        if not isinstance(raw_dist, Mapping):
+            raise TypeError(f"profile_distribution must be a mapping, got {type(raw_dist).__name__}.")
+        if not raw_dist:
+            raise ValueError("profile_distribution cannot be empty")
+        parsed_dist = {}
+        total_p = 0.0
+        for k, v in raw_dist.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("profile_distribution profile name must be a non-empty string")
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise TypeError(f"profile probability for '{k}' must be numeric, got {type(v).__name__}")
+            v_float = float(v)
+            if not math.isfinite(v_float):
+                raise ValueError(f"profile probability for '{k}' must be finite")
+            if v_float < 0.0 or v_float > 1.0:
+                raise ValueError(f"profile probability for '{k}' must be between 0 and 1, got {v}")
+            total_p += v_float
+            parsed_dist[k] = v_float
+        if not math.isclose(total_p, 1.0, abs_tol=1e-5):
+            raise ValueError(f"profile_distribution probabilities must sum to 1.0, got {total_p}")
+
     sim_run_config = SimulationRunConfig(
         num_interactions=num_interactions,
         num_sequences=num_sequences,
         seed=seed,
         initial_state=initial_state,
+        profile_distribution=parsed_dist,
     )
 
     # 3. Parse & Validate Top-level Transition Matrix
@@ -548,6 +620,18 @@ def parse_config(raw_data: Mapping[str, Any]) -> SimulationConfig:
         if p_name in seen_profiles:
             raise ValueError(f"duplicate profile name: '{p_name}'")
         seen_profiles.add(p_name)
+
+        # Optional probability on profile
+        p_prob = p.get("probability")
+        if p_prob is not None:
+            if isinstance(p_prob, bool) or not isinstance(p_prob, (int, float)):
+                raise TypeError(f"profile '{p_name}' probability must be numeric, got {type(p_prob).__name__}")
+            p_prob_f = float(p_prob)
+            if not math.isfinite(p_prob_f):
+                raise ValueError(f"profile '{p_name}' probability must be finite")
+            if p_prob_f < 0.0 or p_prob_f > 1.0:
+                raise ValueError(f"profile '{p_name}' probability must be between 0 and 1, got {p_prob}")
+            p_prob = p_prob_f
 
         # State emissions validation
         raw_emissions = p.get("state_emissions")
@@ -625,8 +709,25 @@ def parse_config(raw_data: Mapping[str, Any]) -> SimulationConfig:
                 transition_matrix=prof_matrix,
                 transition_rules=rule_configs,
                 metadata=p.get("metadata"),
+                probability=p_prob,
             )
         )
+
+    # Inferred distribution from profile probabilities if not explicitly given
+    if parsed_dist is None and len(profile_configs) > 1 and all(p.probability is not None for p in profile_configs):
+        total_p = sum(p.probability for p in profile_configs if p.probability is not None)
+        if not math.isclose(total_p, 1.0, abs_tol=1e-5):
+            raise ValueError(f"profile probabilities must sum to 1.0, got {total_p}")
+        parsed_dist = {p.name: p.probability for p in profile_configs if p.probability is not None}
+
+    # Cross-validation between parsed distribution and profiles
+    if parsed_dist is not None:
+        for k in parsed_dist.keys():
+            if k not in seen_profiles:
+                raise ValueError(f"profile_distribution references unknown profile '{k}'")
+        for k in seen_profiles:
+            if k not in parsed_dist:
+                raise ValueError(f"profile_distribution missing profile '{k}'")
 
     return SimulationConfig(
         version=version,
@@ -634,6 +735,7 @@ def parse_config(raw_data: Mapping[str, Any]) -> SimulationConfig:
         profiles=profile_configs,
         simulation=sim_run_config,
         transition_matrix=top_matrix,
+        profile_distribution=parsed_dist,
     )
 
 
@@ -662,6 +764,7 @@ def validate_config(config: Union[SimulationConfig, Mapping[str, Any]]) -> None:
             if mat.shape != (n_states, n_states):
                 raise ValueError(f"transition_matrix must have shape ({n_states}, {n_states})")
 
+        seen_profiles = {p.name for p in config.profiles}
         for p in config.profiles:
             for s_name in p.state_emissions:
                 if s_name not in seen_states:
@@ -686,37 +789,68 @@ def validate_config(config: Union[SimulationConfig, Mapping[str, Any]]) -> None:
 
         if config.simulation.initial_state is not None and config.simulation.initial_state not in seen_states:
             raise ValueError(f"initial_state '{config.simulation.initial_state}' does not exist in configured states")
+
+        active_dist = config.profile_distribution or config.simulation.profile_distribution
+        if active_dist is not None:
+            if not isinstance(active_dist, Mapping):
+                raise TypeError("profile_distribution must be a mapping")
+            if not active_dist:
+                raise ValueError("profile_distribution cannot be empty")
+            total_p = 0.0
+            for k, v in active_dist.items():
+                if k not in seen_profiles:
+                    raise ValueError(f"profile_distribution references unknown profile '{k}'")
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    raise TypeError(f"profile probability for '{k}' must be numeric")
+                v_float = float(v)
+                if not math.isfinite(v_float) or v_float < 0.0 or v_float > 1.0:
+                    raise ValueError(f"profile probability for '{k}' must be finite and within [0, 1]")
+                total_p += v_float
+            for k in seen_profiles:
+                if k not in active_dist:
+                    raise ValueError(f"profile_distribution missing profile '{k}'")
+            if not math.isclose(total_p, 1.0, abs_tol=1e-5):
+                raise ValueError(f"profile_distribution probabilities must sum to 1.0, got {total_p}")
     else:
         raise TypeError(f"Config must be a SimulationConfig or Mapping, got {type(config).__name__}.")
 
 
-def build_simulator(config: SimulationConfig, profile_name: Optional[str] = None) -> Simulator:
+def build_simulator(
+    config: SimulationConfig,
+    profile_name: Optional[str] = None,
+    profile_distribution: Optional[Mapping[str, float]] = None,
+) -> Simulator:
     """Build a core Simulator from a validated SimulationConfig.
 
     Args:
         config: Validated SimulationConfig instance.
-        profile_name: Optional profile name to select. If None, the first profile is used.
+        profile_name: Optional profile name to select. If None, the first profile is used
+            unless profile_distribution is configured.
+        profile_distribution: Optional profile probabilities mapping for mixture simulation.
 
     Returns:
         Simulator instance.
     """
-    return config.to_core(profile_name=profile_name)
+    return config.to_core(profile_name=profile_name, profile_distribution=profile_distribution)
 
 
 def run_simulation(
     config: SimulationConfig,
     profile_name: Optional[str] = None,
+    profile_distribution: Optional[Mapping[str, float]] = None,
 ) -> pd.DataFrame:
     """Execute a simulation run directly using settings from a SimulationConfig.
 
     Args:
         config: Validated SimulationConfig instance.
-        profile_name: Optional profile name to select. If None, the first profile is used.
+        profile_name: Optional profile name to select. If None, the first profile is used
+            unless profile_distribution is configured.
+        profile_distribution: Optional profile probabilities mapping for mixture simulation.
 
     Returns:
         pd.DataFrame containing the generated simulation trace.
     """
-    sim = build_simulator(config, profile_name=profile_name)
+    sim = build_simulator(config, profile_name=profile_name, profile_distribution=profile_distribution)
     return sim.simulate(
         num_interactions=config.simulation.num_interactions,
         num_sequences=config.simulation.num_sequences,

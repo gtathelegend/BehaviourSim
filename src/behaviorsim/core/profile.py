@@ -27,6 +27,7 @@ class Profile:
     transition_matrix: Optional[np.ndarray] = None
     transition_rules: Optional[Sequence[TransitionRule]] = None
     metadata: Optional[Mapping[str, Any]] = None
+    probability: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -54,3 +55,14 @@ class Profile:
 
         if self.metadata is not None and not isinstance(self.metadata, Mapping):
             raise ValueError("Profile metadata must be a mapping.")
+
+        if self.probability is not None:
+            if isinstance(self.probability, bool) or not isinstance(self.probability, (int, float)):
+                raise TypeError(
+                    f"Profile probability must be numeric, got {type(self.probability).__name__}."
+                )
+            prob = float(self.probability)
+            if not np.isfinite(prob):
+                raise ValueError("Profile probability must be a finite number.")
+            if not (0.0 <= prob <= 1.0):
+                raise ValueError(f"Profile probability must be in [0.0, 1.0], got {self.probability}.")
