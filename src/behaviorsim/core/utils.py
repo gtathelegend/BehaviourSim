@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import bisect
 from typing import Any, Optional, Sequence
 import numpy as np
+
 
 
 def create_rng(seed: Optional[int] = None) -> np.random.Generator:
@@ -124,3 +126,32 @@ def sample_categorical(
         idx = rng.choice(n_items)
 
     return items[idx]
+
+
+def _prevalidated_sample_categorical(
+    rng: np.random.Generator,
+    items: Sequence[Any],
+    cdf: Sequence[float],
+) -> Any:
+    """Sample an item using precomputed cumulative probabilities without redundant validation.
+
+    Invariant:
+        `cdf` was precomputed from a previously validated probability vector (non-empty,
+        non-negative, finite, monotonically non-decreasing, with cdf[-1] == 1.0) and
+        len(cdf) == len(items). This function is strictly internal to BehaviorSim for
+        performance-critical simulation loops and is never exposed as an unchecked public API.
+
+    Args:
+        rng: NumPy random Generator instance.
+        items: Sequence of items to sample from.
+        cdf: Precomputed cumulative distribution function table.
+
+    Returns:
+        A single sampled item from items.
+    """
+    idx = bisect.bisect_right(cdf, rng.random())
+    return items[idx]
+
+
+_sample_categorical_prevalidated = _prevalidated_sample_categorical
+

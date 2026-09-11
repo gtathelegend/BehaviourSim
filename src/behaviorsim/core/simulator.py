@@ -18,8 +18,10 @@ from behaviorsim.core.transition import HistoryContext, TransitionRule
 from behaviorsim.core.utils import (
     create_rng,
     sample_categorical,
+    _prevalidated_sample_categorical,
     validate_transition_matrix,
 )
+
 
 
 @dataclass
@@ -216,6 +218,7 @@ class Simulator:
                 )
 
         self._profile_matrices: Dict[str, np.ndarray] = {}
+        self._profile_cdfs: Dict[str, Tuple[Tuple[float, ...], ...]] = {}
         for p_name, p in self.profiles.items():
             if p.transition_matrix is not None:
                 active_matrix = p.transition_matrix
@@ -235,6 +238,14 @@ class Simulator:
                     f"does not match state count ({n_states}, {n_states})."
                 )
             self._profile_matrices[p_name] = active_matrix
+
+            # Precompute cumulative distribution function (CDF) tables for fast transition sampling
+            cdfs = []
+            for s_idx in range(n_states):
+                row_cdf = list(np.cumsum(active_matrix[s_idx]))
+                row_cdf[-1] = 1.0  # Ensure boundary precision
+                cdfs.append(tuple(row_cdf))
+            self._profile_cdfs[p_name] = tuple(cdfs)
 
         if self.profile is not None:
             self.transition_matrix = self._profile_matrices[self.profile.name]
@@ -409,6 +420,9 @@ class Simulator:
                 selected_profile = self.profiles[selected_profile_name]
 
             prof_matrix = self._profile_matrices[selected_profile.name]
+            prof_cdfs = self._profile_cdfs[selected_profile.name]
+            state_names = self.state_names
+            state_to_idx = self.state_to_idx
 
             states_list: List[str] = []
             interaction_ids: List[int] = []
@@ -430,17 +444,18 @@ class Simulator:
                                     current_state = rule.target_state
                                 else:
                                     # Fallback to profile transition matrix if probability check fails
-                                    curr_idx = self.state_to_idx[current_state]
-                                    probs = prof_matrix[curr_idx]
-                                    next_idx = sample_categorical(seq_rng, list(range(len(self.states))), probs)
-                                    current_state = self.state_names[next_idx]
+                                    curr_idx = state_to_idx[current_state]
+                                    current_state = _prevalidated_sample_categorical(
+                                        seq_rng, state_names, prof_cdfs[curr_idx]
+                                    )
                                 break  # First matching rule precedence
 
                     if not override_triggered:
-                        curr_idx = self.state_to_idx[current_state]
-                        probs = prof_matrix[curr_idx]
-                        next_idx = sample_categorical(seq_rng, list(range(len(self.states))), probs)
-                        current_state = self.state_names[next_idx]
+                        curr_idx = state_to_idx[current_state]
+                        current_state = _prevalidated_sample_categorical(
+                            seq_rng, state_names, prof_cdfs[curr_idx]
+                        )
+
 
                 states_list.append(current_state)
                 interaction_ids.append(i + 1)
