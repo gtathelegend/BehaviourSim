@@ -114,6 +114,8 @@ def sample_categorical(
             raise ValueError("Probabilities contain non-finite values (NaN or Inf).")
         if np.any(probs < 0.0):
             raise ValueError("Probabilities must be non-negative.")
+        if np.any(probs > 1.0 + 1e-6):
+            raise ValueError("Probabilities must be <= 1.0.")
         if not np.isclose(probs.sum(), 1.0, atol=1e-6):
             raise ValueError(f"Probabilities must sum to 1.0, got sum {probs.sum()}.")
 

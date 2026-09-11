@@ -361,20 +361,18 @@ class Simulator:
         """Execute simulation loop across one or more independent sequences.
 
         Args:
-            num_interactions: Number of interactions per sequence. Must be >= 1.
-            num_sequences: Number of independent sequences to simulate. Must be >= 1.
+            num_interactions: Number of interactions per sequence. Must be non-negative (>= 0).
+            num_sequences: Number of independent sequences to simulate. Must be non-negative (>= 0).
             seed: Base random seed for deterministic execution.
 
         Returns:
             pd.DataFrame containing interaction traces across all generated sequences.
         """
-        if num_interactions < 1:
-            raise ValueError(f"num_interactions must be >= 1, got {num_interactions}.")
+        if num_interactions < 0:
+            raise ValueError(f"num_interactions must be non-negative, got {num_interactions}.")
 
-        if num_sequences < 1:
-            raise ValueError(f"num_sequences must be >= 1, got {num_sequences}.")
-
-        base_rng = create_rng(seed)
+        if num_sequences < 0:
+            raise ValueError(f"num_sequences must be non-negative, got {num_sequences}.")
 
         # Pre-determine stable union feature column ordering across all profiles and states
         feature_names: List[str] = []
@@ -384,6 +382,11 @@ class Simulator:
                     if f_name not in feature_names:
                         feature_names.append(f_name)
 
+        if num_interactions == 0 or num_sequences == 0:
+            columns = ["profile", "sequence_id", "interaction_id", "state"] + feature_names
+            return pd.DataFrame(columns=columns)
+
+        base_rng = create_rng(seed)
         sequence_dfs: List[pd.DataFrame] = []
         is_single = len(self.profiles) == 1
         single_profile = next(iter(self.profiles.values())) if is_single else None
@@ -490,8 +493,8 @@ class Simulator:
         Ergonomic public alias for simulate().
 
         Args:
-            num_interactions: Number of interactions per sequence. Must be >= 1.
-            num_sequences: Number of independent sequences to simulate. Must be >= 1.
+            num_interactions: Number of interactions per sequence. Must be non-negative (>= 0).
+            num_sequences: Number of independent sequences to simulate. Must be non-negative (>= 0).
             seed: Base random seed for deterministic execution.
 
         Returns:
