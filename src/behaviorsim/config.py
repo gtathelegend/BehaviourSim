@@ -276,8 +276,8 @@ def validate_distribution_params(distribution: str, params: Mapping[str, Any]) -
                     or math.isinf(prob)
                 ):
                     raise ValueError("categorical probabilities must be finite numbers")
-                if prob < 0:
-                    raise ValueError(f"categorical probabilities must be non-negative, got {prob}")
+                if prob < 0 or prob > 1.0:
+                    raise ValueError(f"categorical probabilities must be within [0, 1], got {prob}")
             if not math.isclose(sum(probs), 1.0, abs_tol=1e-5):
                 raise ValueError(f"categorical probabilities must sum to 1.0, got {sum(probs)}")
 

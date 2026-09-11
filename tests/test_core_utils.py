@@ -147,3 +147,39 @@ def test_sample_categorical_invalid_sum() -> None:
     rng = create_rng(42)
     with pytest.raises(ValueError, match="must sum to 1.0"):
         sample_categorical(rng, ["a", "b"], [0.4, 0.4])
+
+
+def test_prevalidated_sample_categorical_equivalence() -> None:
+    """Verify _prevalidated_sample_categorical produces identical draws to sample_categorical."""
+    from behaviorsim.core.utils import _prevalidated_sample_categorical
+
+    items = ["low", "mid", "high"]
+    probs = [0.2, 0.5, 0.3]
+    cdf = (0.2, 0.7, 1.0)
+
+    # Independent RNGs with same seed
+    rng1 = create_rng(12345)
+    rng2 = create_rng(12345)
+
+    draws_std = [sample_categorical(rng1, items, probs) for _ in range(500)]
+    draws_fast = [_prevalidated_sample_categorical(rng2, items, cdf) for _ in range(500)]
+
+    assert draws_std == draws_fast
+
+
+def test_prevalidated_sample_categorical_distribution_frequencies() -> None:
+    """Verify statistical frequency convergence of _prevalidated_sample_categorical."""
+    from collections import Counter
+    from behaviorsim.core.utils import _prevalidated_sample_categorical
+
+    items = ["A", "B", "C"]
+    cdf = (0.6, 0.9, 1.0)
+    rng = create_rng(999)
+
+    n = 20_000
+    counts = Counter(_prevalidated_sample_categorical(rng, items, cdf) for _ in range(n))
+
+    assert np.isclose(counts["A"] / n, 0.60, atol=0.015)
+    assert np.isclose(counts["B"] / n, 0.30, atol=0.015)
+    assert np.isclose(counts["C"] / n, 0.10, atol=0.015)
+

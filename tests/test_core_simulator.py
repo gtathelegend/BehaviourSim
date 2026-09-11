@@ -394,18 +394,28 @@ def test_transition_rule_probability_boundaries(generic_states: list[State]) -> 
 
 
 def test_simulation_input_validation(generic_states: list[State], generic_profile: Profile) -> None:
-    """Verify invalid simulation interaction and sequence counts are rejected."""
+    """Verify negative simulation counts are rejected and zero counts return empty DataFrame."""
     sim = Simulator(states=generic_states, profile=generic_profile)
 
-    with pytest.raises(ValueError, match="num_interactions must be >= 1"):
-        sim.simulate(num_interactions=0)
+    with pytest.raises(ValueError, match="num_interactions must be non-negative"):
+        sim.simulate(num_interactions=-1)
 
-    with pytest.raises(ValueError, match="num_interactions must be >= 1"):
+    with pytest.raises(ValueError, match="num_interactions must be non-negative"):
         sim.simulate(num_interactions=-5)
 
-    with pytest.raises(ValueError, match="num_sequences must be >= 1"):
-        sim.simulate(num_sequences=0)
+    with pytest.raises(ValueError, match="num_sequences must be non-negative"):
+        sim.simulate(num_sequences=-1)
 
-    with pytest.raises(ValueError, match="num_sequences must be >= 1"):
+    with pytest.raises(ValueError, match="num_sequences must be non-negative"):
         sim.simulate(num_sequences=-2)
+
+    # Valid zero counts return empty DataFrame with schema
+    df_zero_interactions = sim.simulate(num_interactions=0)
+    assert len(df_zero_interactions) == 0
+    assert list(df_zero_interactions.columns) == ["profile", "sequence_id", "interaction_id", "state", "signal", "latency"]
+
+    df_zero_seq = sim.simulate(num_sequences=0)
+    assert len(df_zero_seq) == 0
+    assert list(df_zero_seq.columns) == ["profile", "sequence_id", "interaction_id", "state", "signal", "latency"]
+
 
