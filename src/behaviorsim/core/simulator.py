@@ -60,10 +60,30 @@ class Simulator:
     def __init__(
         self,
         states: Sequence[State],
-        profile: Profile,
+        profile: Optional[Profile] = None,
         transition_matrix: Optional[np.ndarray] = None,
         initial_state: Optional[Union[str, State]] = None,
+        *,
+        profiles: Optional[Union[Sequence[Profile], Mapping[str, Profile]]] = None,
+        profile_distribution: Optional[Mapping[str, float]] = None,
     ) -> None:
+        """Initialize Simulator engine with states and either a single Profile or profile mixture.
+
+        Args:
+            states: Non-empty sequence of discrete State instances with unique names.
+            profile: Optional single Profile instance for single-profile simulation.
+            transition_matrix: Optional fallback 2D stochastic transition matrix.
+            initial_state: Optional initial state name or State instance. Defaults to states[0].
+            profiles: Optional sequence or mapping of Profile instances for multi-profile simulation.
+            profile_distribution: Optional mapping from profile name to selection probability.
+                Must be specified when multiple profiles are provided (unless all profiles define
+                probability). Probabilities must be non-negative, finite, and sum to 1.0.
+
+        Raises:
+            ValueError: If neither or both profile and profiles are supplied, if states or profiles
+                are empty, or if matrix shapes, rules, or probabilities fail validation.
+            TypeError: If arguments are of incorrect types.
+        """
         if not states:
             raise ValueError("Simulator requires at least one State.")
 
@@ -78,26 +98,148 @@ class Simulator:
         self.states = list(states)
         self.state_names = state_names
         self.state_to_idx = {name: idx for idx, name in enumerate(state_names)}
-        self.profile = profile
 
-        # Matrix resolution
-        if profile.transition_matrix is not None:
-            active_matrix = profile.transition_matrix
-        elif transition_matrix is not None:
-            active_matrix = transition_matrix
+        # Profile resolution
+        if profile is not None and profiles is not None:
+            raise ValueError("Cannot specify both 'profile' and 'profiles'. Provide one.")
+        if profile is None and profiles is None:
+            raise ValueError("Simulator requires either 'profile' or 'profiles'.")
+
+        resolved_profiles: Dict[str, Profile] = {}
+
+        if profile is not None:
+            if not isinstance(profile, Profile):
+                raise TypeError(f"profile must be a Profile instance, got {type(profile).__name__}.")
+            resolved_profiles = {profile.name: profile}
         else:
-            raise ValueError(
-                "No transition matrix supplied. Provide transition_matrix on Profile or Simulator."
-            )
+            assert profiles is not None
+            if isinstance(profiles, Mapping):
+                if not profiles:
+                    raise ValueError("profiles must contain at least one Profile.")
+                for k, p in profiles.items():
+                    if not isinstance(p, Profile):
+                        raise TypeError(
+                            f"All values in profiles mapping must be Profile instances, got {type(p).__name__}."
+                        )
+                    if k != p.name:
+                        raise ValueError(f"Profile mapping key '{k}' does not match Profile.name '{p.name}'.")
+                    resolved_profiles[k] = p
+            elif isinstance(profiles, Sequence) and not isinstance(profiles, (str, bytes)):
+                if not profiles:
+                    raise ValueError("profiles must contain at least one Profile.")
+                for i, p in enumerate(profiles):
+                    if not isinstance(p, Profile):
+                        raise TypeError(f"Element at index {i} of profiles is not a Profile instance.")
+                    if p.name in resolved_profiles:
+                        raise ValueError(f"Duplicate profile name '{p.name}' in profiles.")
+                    resolved_profiles[p.name] = p
+            else:
+                raise TypeError(
+                    f"profiles must be a Sequence or Mapping of Profile, got {type(profiles).__name__}."
+                )
 
-        validate_transition_matrix(active_matrix)
-        n_states = len(self.states)
-        if active_matrix.shape != (n_states, n_states):
-            raise ValueError(
-                f"Transition matrix shape {active_matrix.shape} does not match state count ({n_states}, {n_states})."
-            )
+        # Profile distribution resolution & validation
+        resolved_dist: Dict[str, float] = {}
+        if profile_distribution is not None:
+            if not isinstance(profile_distribution, Mapping):
+                raise TypeError(
+                    f"profile_distribution must be a mapping, got {type(profile_distribution).__name__}."
+                )
+            if not profile_distribution:
+                raise ValueError("profile_distribution cannot be empty.")
 
-        self.transition_matrix = active_matrix
+            # Unknown profile names check
+            for p_name in profile_distribution.keys():
+                if p_name not in resolved_profiles:
+                    raise ValueError(
+                        f"Unknown profile name '{p_name}' in profile_distribution. "
+                        f"Available profiles: {sorted(resolved_profiles.keys())}."
+                    )
+
+            # Missing profile names check
+            for p_name in resolved_profiles.keys():
+                if p_name not in profile_distribution:
+                    raise ValueError(f"Missing profile '{p_name}' in profile_distribution.")
+
+            # Probabilities validation
+            total_prob = 0.0
+            for p_name, prob in profile_distribution.items():
+                if isinstance(prob, bool) or not isinstance(prob, (int, float)):
+                    raise TypeError(
+                        f"Profile probability for '{p_name}' must be numeric, got {type(prob).__name__}."
+                    )
+                prob_float = float(prob)
+                if not np.isfinite(prob_float):
+                    raise ValueError(f"Profile probability for '{p_name}' must be finite, got {prob}.")
+                if prob_float < 0.0 or prob_float > 1.0:
+                    raise ValueError(f"Profile probability for '{p_name}' must be in [0.0, 1.0], got {prob}.")
+                total_prob += prob_float
+                resolved_dist[p_name] = prob_float
+
+            if not np.isclose(total_prob, 1.0, atol=1e-5):
+                raise ValueError(f"Profile probabilities must sum to 1.0, got sum {total_prob}.")
+
+        else:
+            # profile_distribution is None
+            if len(resolved_profiles) == 1:
+                only_name = next(iter(resolved_profiles.keys()))
+                resolved_dist = {only_name: 1.0}
+            else:
+                # Check if all profiles have explicit probability set on the Profile object
+                if all(p.probability is not None for p in resolved_profiles.values()):
+                    total_prob = 0.0
+                    for p_name, p in resolved_profiles.items():
+                        assert p.probability is not None
+                        prob_float = float(p.probability)
+                        total_prob += prob_float
+                        resolved_dist[p_name] = prob_float
+                    if not np.isclose(total_prob, 1.0, atol=1e-5):
+                        raise ValueError(f"Profile probabilities must sum to 1.0, got sum {total_prob}.")
+                else:
+                    raise ValueError(
+                        "profile_distribution must be explicitly specified when multiple profiles are provided."
+                    )
+
+        self.profiles = resolved_profiles
+        self.profile_distribution = resolved_dist
+        self.profile = profile if profile is not None else (
+            next(iter(resolved_profiles.values())) if len(resolved_profiles) == 1 else None
+        )
+
+        # Matrix resolution & validation across all profiles
+        if transition_matrix is not None:
+            validate_transition_matrix(transition_matrix)
+            n_states = len(self.states)
+            if transition_matrix.shape != (n_states, n_states):
+                raise ValueError(
+                    f"Transition matrix shape {transition_matrix.shape} does not match state count ({n_states}, {n_states})."
+                )
+
+        self._profile_matrices: Dict[str, np.ndarray] = {}
+        for p_name, p in self.profiles.items():
+            if p.transition_matrix is not None:
+                active_matrix = p.transition_matrix
+            elif transition_matrix is not None:
+                active_matrix = transition_matrix
+            else:
+                raise ValueError(
+                    f"No transition matrix supplied for profile '{p_name}'. "
+                    "Provide transition_matrix on Profile or Simulator."
+                )
+
+            validate_transition_matrix(active_matrix)
+            n_states = len(self.states)
+            if active_matrix.shape != (n_states, n_states):
+                raise ValueError(
+                    f"Transition matrix shape {active_matrix.shape} for profile '{p_name}' "
+                    f"does not match state count ({n_states}, {n_states})."
+                )
+            self._profile_matrices[p_name] = active_matrix
+
+        if self.profile is not None:
+            self.transition_matrix = self._profile_matrices[self.profile.name]
+        else:
+            self.transition_matrix = transition_matrix
 
         # Initial state resolution
         if initial_state is not None:
@@ -110,13 +252,14 @@ class Simulator:
         else:
             self.initial_state = self.state_names[0]
 
-        # Validate profile transition rules target states
-        if profile.transition_rules:
-            for rule in profile.transition_rules:
-                if rule.target_state not in self.state_to_idx:
-                    raise ValueError(
-                        f"Transition rule target_state '{rule.target_state}' not found in registered states: {self.state_names}"
-                    )
+        # Validate profile transition rules target states across all profiles
+        for p_name, p in self.profiles.items():
+            if p.transition_rules:
+                for rule in p.transition_rules:
+                    if rule.target_state not in self.state_to_idx:
+                        raise ValueError(
+                            f"Transition rule target_state '{rule.target_state}' not found in registered states: {self.state_names}"
+                        )
 
     def _sample_feature_value(
         self,
@@ -233,20 +376,36 @@ class Simulator:
 
         base_rng = create_rng(seed)
 
-        # Pre-determine feature column ordering from emissions map across states
+        # Pre-determine stable union feature column ordering across all profiles and states
         feature_names: List[str] = []
-        for state_name, feature_map in self.profile.state_emissions.items():
-            for f_name in feature_map.keys():
-                if f_name not in feature_names:
-                    feature_names.append(f_name)
+        for prof in self.profiles.values():
+            for state_name, feature_map in prof.state_emissions.items():
+                for f_name in feature_map.keys():
+                    if f_name not in feature_names:
+                        feature_names.append(f_name)
 
         sequence_dfs: List[pd.DataFrame] = []
+        is_single = len(self.profiles) == 1
+        single_profile = next(iter(self.profiles.values())) if is_single else None
+        profile_names = list(self.profiles.keys())
+        profile_probs = [self.profile_distribution[name] for name in profile_names]
 
         for seq_idx in range(1, num_sequences + 1):
             # Sequence seed derivation ensures determinism and sequence isolation
             seq_seed = int(base_rng.integers(0, 2**31 - 1)) if seed is None else seed + (seq_idx - 1) * 1000
             seq_rng = create_rng(seq_seed)
             history = SimulationHistory()
+
+            if is_single:
+                assert single_profile is not None
+                selected_profile = single_profile
+            else:
+                profile_seed = int(base_rng.integers(0, 2**31 - 1)) if seed is None else seq_seed + 500
+                profile_rng = create_rng(profile_seed)
+                selected_profile_name = sample_categorical(profile_rng, profile_names, profile_probs)
+                selected_profile = self.profiles[selected_profile_name]
+
+            prof_matrix = self._profile_matrices[selected_profile.name]
 
             states_list: List[str] = []
             interaction_ids: List[int] = []
@@ -260,41 +419,41 @@ class Simulator:
                 # 1. Transition Determination (for i > 0)
                 if i > 0:
                     override_triggered = False
-                    if self.profile.transition_rules:
-                        for rule in self.profile.transition_rules:
+                    if selected_profile.transition_rules:
+                        for rule in selected_profile.transition_rules:
                             if rule.condition(history):
                                 override_triggered = True
                                 if seq_rng.random() < rule.probability:
                                     current_state = rule.target_state
                                 else:
-                                    # Fallback to base transition matrix if probability check fails
+                                    # Fallback to profile transition matrix if probability check fails
                                     curr_idx = self.state_to_idx[current_state]
-                                    probs = self.transition_matrix[curr_idx]
+                                    probs = prof_matrix[curr_idx]
                                     next_idx = sample_categorical(seq_rng, list(range(len(self.states))), probs)
                                     current_state = self.state_names[next_idx]
                                 break  # First matching rule precedence
 
                     if not override_triggered:
                         curr_idx = self.state_to_idx[current_state]
-                        probs = self.transition_matrix[curr_idx]
+                        probs = prof_matrix[curr_idx]
                         next_idx = sample_categorical(seq_rng, list(range(len(self.states))), probs)
                         current_state = self.state_names[next_idx]
 
                 states_list.append(current_state)
                 interaction_ids.append(i + 1)
                 sequence_ids.append(seq_idx)
-                profiles_list.append(self.profile.name)
+                profiles_list.append(selected_profile.name)
 
                 # 2. Feature Emission Sampling
                 eval_ctx = FeatureEvaluationContext(
                     state=current_state,
-                    profile=self.profile,
+                    profile=selected_profile,
                     interaction_index=i,
                     history=history,
                     rng=seq_rng,
                 )
 
-                state_emissions = self.profile.state_emissions.get(current_state, {})
+                state_emissions = selected_profile.state_emissions.get(current_state, {})
                 for f_name in feature_names:
                     if f_name in state_emissions:
                         dist_spec = state_emissions[f_name]
@@ -369,13 +528,16 @@ class Simulator:
         cls,
         config: Union[SimulationConfig, Mapping[str, Any], str, Path],
         profile_name: Optional[str] = None,
+        profile_distribution: Optional[Mapping[str, float]] = None,
     ) -> Simulator:
         """Construct a Simulator instance from a configuration specification.
 
         Args:
             config: SimulationConfig instance, configuration mapping/dict, or path to a YAML/JSON file.
             profile_name: Optional profile name to select from multi-profile configs.
-                If None, defaults to the first profile in the configuration.
+                If None, defaults to the first profile in the configuration unless profile_distribution
+                is specified.
+            profile_distribution: Optional mapping of profile probabilities for mixture simulation.
 
         Returns:
             Configured Simulator instance.
@@ -399,4 +561,4 @@ class Simulator:
                 "Expected SimulationConfig, Mapping, or file path (str/Path)."
             )
 
-        return cfg.to_core(profile_name=profile_name)
+        return cfg.to_core(profile_name=profile_name, profile_distribution=profile_distribution)
