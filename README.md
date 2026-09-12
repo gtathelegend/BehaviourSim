@@ -68,7 +68,7 @@ For local development from a cloned repository:
 pip install -e ".[dev]"
 ```
 
-Requirements: Python $\ge$ 3.9, NumPy $\ge$ 1.24, Pandas $\ge$ 2.0, SciPy $\ge$ 1.10, PyYAML $\ge$ 6.0.
+Requirements: Python >= 3.9, NumPy >= 1.24, Pandas >= 2.0, SciPy >= 1.10, PyYAML >= 6.0.
 
 ---
 
@@ -165,7 +165,11 @@ BehaviorSim uses **explicit proxy-based state extraction** (`extract_state_proxy
 ## Feature Engineering
 
 The feature engineering layer computes historical sequential metrics under a **strict causal contract**:
-$$\text{feature}_t = f(x_0, x_1, \dots, x_{t-1})$$
+
+$$
+\text{feature}_t = f(x_0, x_1, \dots, x_{t-1})
+$$
+
 Features computed at interaction $t$ evaluate observations strictly prior to step $t$. Current step outcomes and future steps are never leaked.
 
 ```python
