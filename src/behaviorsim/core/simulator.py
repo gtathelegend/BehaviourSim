@@ -237,7 +237,7 @@ class Simulator:
                     f"Transition matrix shape {active_matrix.shape} for profile '{p_name}' "
                     f"does not match state count ({n_states}, {n_states})."
                 )
-            self._profile_matrices[p_name] = active_matrix
+            self._profile_matrices[p_name] = np.array(active_matrix, copy=True)
 
             # Precompute cumulative distribution function (CDF) tables for fast transition sampling
             cdfs = []

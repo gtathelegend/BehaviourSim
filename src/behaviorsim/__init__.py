@@ -7,7 +7,7 @@ from behaviorsim.core.simulator import Simulator
 from behaviorsim.core.state import State
 from behaviorsim.core.transition import TransitionRule
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "Simulator",

@@ -40,6 +40,7 @@ class Profile:
 
         if self.transition_matrix is not None:
             validate_transition_matrix(self.transition_matrix)
+            self.transition_matrix = np.array(self.transition_matrix, copy=True)
 
         if self.transition_rules is not None:
             if not isinstance(self.transition_rules, Iterable) or isinstance(
