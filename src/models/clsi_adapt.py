@@ -713,17 +713,35 @@ def predict_profile(
 # Public API: SHAP
 # ---------------------------------------------------------------------------
 
+def _patch_shap_ubjson() -> None:
+    """Monkey-patch shap's UBJSON decoder to handle XGBoost 3.x array-formatted base_score '[0E0]'."""
+    try:
+        import shap.explainers._tree as _shap_tree
+        if hasattr(_shap_tree, "decode_ubjson_buffer") and not getattr(_shap_tree.decode_ubjson_buffer, "_bs_patched", False):
+            orig_decode = _shap_tree.decode_ubjson_buffer
+            def _wrapped_decode(*args, **kwargs):
+                jmodel = orig_decode(*args, **kwargs)
+                try:
+                    lmp = jmodel.get("learner", {}).get("learner_model_param", {})
+                    bs = lmp.get("base_score")
+                    if isinstance(bs, str) and bs.startswith("[") and bs.endswith("]"):
+                        lmp["base_score"] = bs[1:-1]
+                except Exception:
+                    pass
+                return jmodel
+            _wrapped_decode._bs_patched = True
+            _shap_tree.decode_ubjson_buffer = _wrapped_decode
+    except Exception:
+        pass
+
+
 def compute_shap(
-    model: xgb.XGBClassifier,
+    model: Any,
     X: np.ndarray,
     feature_names: List[str] = FEATURE_NAMES,
     max_display: int = 11,
 ) -> Tuple[shap.Explanation, shap.TreeExplainer]:
-    """Compute SHAP values for a trained profile model.
-
-    Uses ``shap.TreeExplainer`` which is exact and efficient for XGBoost.
-    The feature names and ordering must match those used during training
-    (``FEATURE_NAMES`` = ``FEATURE_COLUMNS`` + [``rolling_mean_nrt``]).
+    """Compute SHAP values using TreeExplainer on a trained XGBClassifier.
 
     Parameters
     ----------
@@ -744,6 +762,7 @@ def compute_shap(
     explainer : shap.TreeExplainer
         The fitted TreeExplainer instance.
     """
+    _patch_shap_ubjson()
     explainer = shap.TreeExplainer(model)
     shap_values = explainer(X)
     # Attach feature names to the Explanation for plotting

@@ -13,7 +13,11 @@ Tests cover:
   10. Deterministic output across identical calls.
 """
 
+from __future__ import annotations
+
 import unittest
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
@@ -34,8 +38,8 @@ from src.feature_engineering import (
 def _make_df(
     n: int,
     profile: str = "test",
-    accuracy: list | None = None,
-    nrt: list | None = None,
+    accuracy: Optional[list] = None,
+    nrt: Optional[list] = None,
 ) -> pd.DataFrame:
     """Create a minimal synthetic interaction DataFrame for testing."""
     rng = np.random.default_rng(0)
