@@ -1,219 +1,333 @@
-# CLSI-Adapt Simulator: Adaptive Cognitive Load Detection Framework
+# BehaviorSim: Synthetic Sequential Behavioral Data Generation
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/pytest-179%20passed-success.svg)](https://docs.pytest.org/)
-[![Reproducibility](https://img.shields.io/badge/seed-42-brightgreen.svg)](#reproducibility-instructions)
-[![Status](https://img.shields.io/badge/publication--status-publication%20ready-blue.svg)](#scientific-status)
+[![Tests](https://img.shields.io/badge/pytest-631%20passed-success.svg)](https://docs.pytest.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Reproducibility](https://img.shields.io/badge/reproducible-deterministic%20seeds-brightgreen.svg)](#reproducibility)
 
-An open-source synthetic learner simulation environment and benchmark framework for evaluating adaptive cognitive load state identification algorithms (**CLSI-Adapt**) against heuristic and Bayesian Knowledge Tracing (BKT) baselines under strictly causal, forward-chaining temporal validation.
-
----
-
-## Executive Summary & Research Objective
-
-Real-time cognitive load detection in digital learning platforms is essential for preventing cognitive overload and tailoring adaptive interventions. However, invasive physiological sensors (e.g., eye-tracking, EEG) are impractical for large-scale remote learning. 
-
-The **CLSI-Adapt Simulator** evaluates whether unobtrusive behavioral telemetry—specifically interaction response times, accuracy dynamics, retry frequencies, and help requests—can predictively detect simulator-defined cognitive overload transitions before learning collapse occurs.
+**BehaviorSim** is a lightweight, dependency-minimal Python library for generating, calibrating, feature-engineering, and analyzing synthetic sequential behavioral telemetry with ground-truth discrete states.
 
 ---
 
-## Experimental Architecture
+## Why BehaviorSim?
 
-The framework implements a 5-stage pipeline:
+Developing adaptive systems, recommendation engines, and user state identification algorithms requires high-fidelity sequential interaction traces. However, empirical telemetry often lacks ground-truth psychological, cognitive, or operational state labels, suffers from privacy and compliance restrictions, or presents severe class imbalance.
+
+BehaviorSim provides:
+- **Ground-truth state tracking**: Exact discrete behavioral states recorded at every step without latent ambiguity.
+- **Configurable dynamics**: Markovian transition matrices alongside priority-ordered conditional transition rules.
+- **State-conditioned parametric emissions**: Continuous, discrete, and categorical feature emissions conditioned on active states and interaction history.
+- **Multi-profile simulation**: Heterogeneous user cohorts with configurable mixture distributions.
+- **Empirical calibration & validation**: Parameter fitting from observed traces with statistical fidelity validation.
+- **Strictly causal feature engineering**: History-dependent rolling windows, dwell times, and session metrics with zero forward-looking leakage.
+- **Publication-ready visualization**: Restrained, publication-grade plotting utilities for states, trajectories, distributions, and diagnostic dashboards.
+
+---
+
+## Features
+
+- **Discrete Behavioral States**: Immutable, named state abstractions (`State`).
+- **Flexible Emission Families**: Gaussian, Log-Normal, Exponential, Uniform, Uniform-Discrete, Bernoulli, Poisson, and Categorical distributions (`FeatureDistribution`).
+- **Archetype Profiles**: Encapsulated state transition rules and state-conditioned emission mappings (`Profile`).
+- **Domain Presets**: Ready-to-use simulators for `education`, `mobile_app`, `healthcare`, and `finance`.
+- **Deterministic Calibration**: Proxy-based state extraction, sequence-isolated transition fitting, and automated distribution parameter estimation (`CalibrationData`, `fit_profile`).
+- **Behavioral Cohort Clustering**: Unsupervised entity clustering on sequential feature summaries into discrete profiles (`cluster_profiles`).
+- **Calibration Validation**: Statistical discrepancy evaluation (TVD, Frobenius norm, Wasserstein distance, Kolmogorov-Smirnov test) with configurable verification thresholds (`validate_calibration`, `ValidationReport`).
+- **Causal Feature Pipeline**: Sliding historical windows, state transition counters, and session boundary detectors (`build_behavioral_features`).
+- **Publication-Ready Visualization**: Clean matplotlib diagnostics (`plot_state_occupancy`, `plot_transition_matrix`, `plot_state_trajectory`, `plot_feature_comparison`, `plot_calibration_summary`, `save_figure`).
+- **Declarative YAML/JSON Configuration**: Safe, schema-validated configuration files with zero dynamic code injection (`load_config`, `build_simulator`).
+- **Command-Line Interface**: Fast simulation execution and schema validation via `behaviorsim`.
+
+---
+
+## Installation
+
+### Standard Installation
+```bash
+pip install -e .
+```
+
+### With Optional Parquet Support
+```bash
+pip install -e ".[parquet]"
+```
+
+### Development Dependencies
+```bash
+pip install -e ".[dev]"
+```
+
+Requirements: Python $\ge$ 3.9, NumPy $\ge$ 1.24, Pandas $\ge$ 2.0, SciPy $\ge$ 1.10, PyYAML $\ge$ 6.0.
+
+---
+
+## Quick Start
+
+Generate synthetic behavioral data in 10 lines of Python:
+
+```python
+import numpy as np
+from behaviorsim import Simulator, State, Profile, FeatureDistribution
+
+# 1. Define states
+states = [State("Browse"), State("Cart"), State("Checkout")]
+
+# 2. Define state emissions
+emissions = {
+    "Browse": {"dwell_sec": FeatureDistribution("exponential", {"scale": 15.0})},
+    "Cart": {"dwell_sec": FeatureDistribution("normal", {"mean": 45.0, "std": 10.0})},
+    "Checkout": {"dwell_sec": FeatureDistribution("normal", {"mean": 90.0, "std": 15.0})},
+}
+
+# 3. Define transition matrix P(s_t -> s_{t+1})
+transitions = np.array([
+    [0.70, 0.25, 0.05],
+    [0.20, 0.60, 0.20],
+    [0.00, 0.00, 1.00],
+])
+
+# 4. Build Profile and Simulator
+profile = Profile("Shopper", state_emissions=emissions, transition_matrix=transitions)
+sim = Simulator(states=states, profile=profile, initial_state="Browse")
+
+# 5. Generate reproducible interaction traces
+df = sim.generate(num_interactions=10, num_sequences=5, seed=42)
+print(df[["sequence_id", "interaction_id", "state", "dwell_sec"]].head())
+```
+
+---
+
+## Presets
+
+BehaviorSim includes built-in domain presets constructible via `Simulator.from_preset(name, **kwargs)`:
+
+| Preset | Ground-Truth States | Emitted Features | Profiles |
+| :--- | :--- | :--- | :--- |
+| **`education`** | `Optimal`, `Overload`, `Underload` | `accuracy`, `difficulty`, `nrt`, `retries`, `help_requested`, `confidence` | `fast_accurate`, `fast_inaccurate`, `slow_accurate`, `slow_inaccurate`, `average` |
+| **`mobile_app`**| `Browsing`, `ActiveSession`, `CheckoutFlow` | `session_time_seconds`, `action_count`, `scroll_depth`, `button_clicks`, `notification_clicked`, `cart_value` | `casual_browser`, `power_user`, `bargain_hunter` |
+| **`healthcare`**| `Baseline`, `Elevated`, `Discharged` | `heart_rate_bpm`, `systolic_bp`, `spo2_pct`, `temperature_c`, `alert_triggered`, `mobility_score` | `stable_recovery`, `chronic_risk`, `post_op` |
+| **`finance`**   | `Stable`, `Active`, `Volatile`, `Drawdown` | `portfolio_value`, `daily_return`, `transaction_count`, `trade_volume`, `volatility`, `drawdown`, `risk_alert` | `passive_investor`, `active_trader`, `institutional_fund` |
+
+> [!WARNING]
+> **Domain Disclaimers**:
+> - **Healthcare**: The healthcare preset is a synthetic benchmark model for evaluating telemetry algorithms. It is **NOT** a clinically validated medical model and must **NOT** be used for patient diagnosis, clinical triaging, or healthcare decisions.
+> - **Finance**: The finance preset is a synthetic statistical simulation. It is **NOT** financial, investment, trading, or fraud-detection advice.
+
+---
+
+## Calibration
+
+BehaviorSim provides an empirical calibration subsystem that fits parameters from observed interaction logs.
+
+```python
+from behaviorsim.calibration import CalibrationData, fit_profile, validate_calibration
+
+# 1. Package observed traces
+cal_data = CalibrationData(
+    data=observed_df,
+    states=["Browse", "Cart", "Checkout"],
+    numeric_features=["dwell_sec"],
+)
+
+# 2. Fit generative Profile
+calibrated_profile = fit_profile(cal_data, name="FittedShopper", transition_smoothing=0.01)
+
+# 3. Simulate synthetic counterparts
+sim = Simulator(states=[State(s) for s in cal_data.states], profile=calibrated_profile)
+synthetic_df = sim.generate(num_interactions=10, num_sequences=50, seed=123)
+
+# 4. Statistically validate fidelity
+report = validate_calibration(
+    empirical_data=cal_data,
+    synthetic_data=synthetic_df,
+    profile=calibrated_profile,
+    thresholds={"max_state_tvd": 0.15, "max_transition_mae": 0.10},
+)
+print(f"Validation Passed: {report.is_valid}")
+```
+
+### Conceptual Boundary on Latent Identifiability
+BehaviorSim uses **explicit proxy-based state extraction** (`extract_state_proxy`) or user-declared state columns. It deliberately does not perform unsupervised HMM/Baum-Welch latent-state discovery, which is mathematically non-identifiable without strong structural assumptions.
+
+---
+
+## Feature Engineering
+
+The feature engineering layer computes historical sequential metrics under a **strict causal contract**:
+$$\text{feature}_t = f(x_0, x_1, \dots, x_{t-1})$$
+Features computed at interaction $t$ evaluate observations strictly prior to step $t$. Current step outcomes and future steps are never leaked.
+
+```python
+from behaviorsim.feature_engineering import build_behavioral_features
+
+enriched_df = build_behavioral_features(
+    df,
+    numeric_columns=["dwell_sec"],
+    rolling_windows=[3, 5],
+    rolling_stats=["mean", "var"],
+    sequence_column="sequence_id",
+)
+```
+
+---
+
+## Visualization
+
+BehaviorSim includes a restrained, publication-grade visualization layer returning standard matplotlib `(fig, ax)` tuples:
+
+```python
+from behaviorsim.visualization import (
+    plot_state_occupancy,
+    plot_state_trajectory,
+    plot_transition_matrix,
+    plot_calibration_summary,
+    save_figure,
+)
+
+# State occupancy proportions
+fig, ax = plot_state_occupancy(df, state_column="state")
+save_figure(fig, "figures/occupancy.png", close=True)
+
+# Discrete state trajectories
+fig, ax = plot_state_trajectory(df, max_sequences=5)
+save_figure(fig, "figures/trajectories.png", close=True)
+
+# Transition heatmap
+fig, ax = plot_transition_matrix(df)
+save_figure(fig, "figures/transitions.png", close=True)
+
+# Calibration diagnostic dashboard
+fig, axes = plot_calibration_summary(report)
+save_figure(fig, "figures/calibration_dashboard.png", close=True)
+```
+
+---
+
+## Declarative Configuration & CLI
+
+Simulations can be completely defined in declarative YAML or JSON files:
+
+```yaml
+version: "1.0"
+states: ["Exploration", "Checkout"]
+initial_state: "Exploration"
+profiles:
+  default:
+    probability: 1.0
+    transitions:
+      matrix: [[0.8, 0.2], [0.0, 1.0]]
+    emissions:
+      Exploration:
+        dwell: { distribution: "normal", params: { mean: 30.0, std: 5.0 } }
+      Checkout:
+        dwell: { distribution: "normal", params: { mean: 60.0, std: 10.0 } }
+simulation:
+  n_sequences: 20
+  max_steps: 15
+  seed: 42
+```
+
+### CLI Commands
+```bash
+# Validate configuration schema
+behaviorsim validate simulation.yaml
+
+# Run simulation to CSV, JSON, or Parquet
+behaviorsim run simulation.yaml -o results/traces.csv
+behaviorsim run simulation.yaml -o results/traces.parquet --sequences 100 --seed 123
+```
+
+---
+
+## Architecture
 
 ```text
-Synthetic Learner Simulator (5 Profiles, Seed 42, HMM + Log-Normal RT)
-        ↓
-Ground-Truth Cognitive State Tracking (Optimal / Overload / Underload)
-        ↓
-Temporal Feature Engineering (Causal Sliding Windows, Overload Target)
-        ↓
- ┌──────────────────────┬────────────────────────┬────────────────────────┐
- │ CLSI-Adapt           │ Rule-Based CLSI        │ BKT Baseline           │
- │ (Per-Profile XGBoost)│ (Composite Score)      │ (Mastery / Struggle)   │
- └──────────────────────┴────────────────────────┴────────────────────────┘
-        ↓
-Temporal Evaluation Framework (5-Fold TimeSeriesSplit, Event Recall, Recovery Time)
-        ↓
-Publication Artifacts (CSV/LaTeX Tables & PDF/PNG Figures)
-```
-
-> **Baseline Interpretation Note**: Bayesian Knowledge Tracing (BKT) measures domain skill acquisition $P(L_t)$. In this benchmark, low mastery ($P(L_t) < 0.30$) serves as a **domain struggle proxy**, NOT a direct cognitive-load detector.
-
----
-
-## Repository Structure
-
-```text
-CLSI-Adapt-Simulator/
-├── data/                                 # Primary experimental dataset
-│   ├── simulated_learners_all.csv        # 50,000 raw interactions (Seed 42)
-│   └── simulated_learner_*.csv           # Per-profile raw interaction logs
-├── src/                                  # Production source code
-│   ├── config.py                         # Central configuration parameters
-│   ├── simulator.py                      # Synthetic learner trajectory simulator
-│   ├── feature_engineering.py            # Causal feature extraction & targets
-│   ├── evaluation.py                     # Temporal evaluation & summary tables
-│   ├── visualize.py                      # Publication figure plotting module
-│   └── models/                           # Model implementations
-│       ├── clsi_adapt.py                 # CLSI-Adapt XGBoost + CV model
-│       ├── rule_based_clsi.py            # Rule-Based heuristic composite baseline
-│       └── bkt.py                        # Bayesian Knowledge Tracing baseline
-├── tests/                                # Unit test suite (pytest)
-│   ├── test_simulator.py
-│   ├── test_feature_engineering.py
-│   ├── test_models.py
-│   ├── test_clsi_adapt.py
-│   ├── test_evaluation.py
-│   └── test_visualize.py
-├── results/                              # Final audited publication outputs
-│   ├── tables/                           # CSV and LaTeX LaTeX publication tables
-│   │   ├── profile_metrics.csv / .tex
-│   │   ├── aggregate_metrics.csv / .tex
-│   │   ├── recovery_metrics.csv / .tex
-│   │   └── state_statistics.csv / .tex
-│   ├── figures/                          # Publication figures (PDF & PNG)
-│   │   ├── figure1_architecture.pdf / .png
-│   │   ├── figure2_roc_curves.pdf / .png
-│   │   ├── figure3_shap_summary.pdf / .png
-│   │   ├── figure4_learning_curve.pdf / .png
-│   │   ├── figure5_model_comparison.pdf / .png
-│   │   └── figure_captions.txt
-│   ├── clsi_adapt_phase4_results.txt    # Phase 4 method validation log
-│   ├── evaluation_phase5_audit.txt      # Phase 5 evaluation audit log
-│   ├── figure4_learning_curve_audit.txt # Figure 4 temporal audit log
-│   └── final_reproducibility_audit.txt  # Final reproducibility audit log
-├── scratch/                              # Audit and execution scratch scripts
-├── run_all.py                            # Master pipeline driver script
-├── requirements.txt                      # Python dependencies
-├── CITATION.cff                          # Citation metadata
-└── README.md                             # Documentation
+src/behaviorsim/
+├── core/                   # Mathematical simulation kernel
+│   ├── state.py            # Discrete State representation
+│   ├── feature.py          # Parametric emission FeatureDistribution
+│   ├── transition.py       # Markov transitions and conditional TransitionRule
+│   ├── profile.py          # Behavioral Profile container
+│   ├── simulator.py        # Master Simulator engine
+│   └── utils.py            # Stochastic matrix and seed utilities
+├── config.py               # Declarative schema, validation, & compilation
+├── cli.py                  # Command-line interface ('behaviorsim')
+├── presets/                # Domain-specific simulation presets
+│   ├── registry.py         # Preset registry & factory resolution
+│   ├── education.py        # Cognitive load simulation preset
+│   ├── mobile_app.py       # Mobile engagement & churn preset
+│   ├── healthcare.py       # Adherence telemetry preset
+│   └── finance.py          # Portfolio risk dynamics preset
+├── calibration/            # Empirical parameter calibration & diagnostics
+│   ├── fitter.py           # CalibrationData, proxy extraction, matrix/emission fitting
+│   ├── clustering.py       # Sequence-level k-means profile clustering
+│   └── validator.py        # ValidationReport & statistical fidelity metrics
+├── feature_engineering/    # Strictly causal sequential dynamics
+│   ├── causal.py           # Pipeline compiler & causal validation
+│   ├── windows.py          # Non-leaking rolling window statistics
+│   └── transitions.py      # Dwell times, transition counters, session tracking
+└── visualization/          # Publication-ready plotting & diagnostics
+    ├── plot_states.py      # State occupancy & transition matrix heatmaps
+    ├── plot_trajectories.py# Discrete state & continuous feature trajectories
+    ├── plot_distributions.py# Aligned histograms & categorical comparisons
+    ├── plot_calibration.py # Validation diagnostics & dashboard
+    └── __init__.py         # Public exports & save_figure utility
 ```
 
 ---
 
-## Experimental Design & Dataset Specification
+## Reproducibility
 
-The benchmark dataset consists of **50,000 raw interaction observations** generated under fixed random seed `seed = 42`:
-
-* **Profiles**: 5 synthetic learner profiles (`fast_accurate`, `fast_inaccurate`, `slow_accurate`, `slow_inaccurate`, `average`).
-* **Learners**: 10 distinct synthetic learners per profile ($5 \times 10 = 50$ total learners).
-* **Interactions**: 1,000 sequential interactions per learner.
-* **Warm-up Period**: Initial 20 interactions per learner sequence excluded from prediction evaluation.
-* **No Fallback Datasets**: Evaluated strictly on the primary 50,000-interaction dataset.
-
-### Multi-Learner Design Rationale
-Multiple learners per profile are simulated to:
-1. Avoid relying on a single synthetic trajectory.
-2. Provide adequate positive overload transition events.
-3. Support profile-level pooled learning while strictly preserving independent learner boundaries.
+BehaviorSim guarantees **exact cross-platform reproducibility**:
+- Deterministic seeding: Calling `sim.generate(..., seed=42)` produces bit-for-bit identical DataFrames across runs and operating systems.
+- Hierarchical sequence seeding: Independent sequences derive isolated seeds from the master seed via deterministic hashing (`derive_learner_seed`).
+- Fully reproducible in headless environments with zero dependency on GUI backends.
 
 ---
 
-## Feature Engineering & Target Definition
+## Testing Status
 
-### Feature Matrix $X$
-Contains 11 causal features computed per interaction $t$:
-* **Base Features**: `nrt` (normalized response time), `accuracy`, `window_error_rate`, `retries`, `help_requested`, `confidence`, `streak_correct`, `streak_incorrect`, `nrt_variance`, `session_time`.
-* **Rolling Mean NRT**: `rolling_mean_nrt` computed over historical interactions.
+The BehaviorSim test suite includes **631 passing tests** with 100% clean diff audits across all subsystems:
 
-> **Feature Window Note**: While original PRD preliminary documents referenced an initial window of 10, the finalized production implementation uses `feature_window_size = 5` in `Config` and `run_all.py` to maintain local sensitivity to rapid cognitive transitions.
-
-### Overload Target Definition $y$
-An interaction $t$ is labeled `overload = 1` if and only if:
-$$\text{mean}(\text{accuracy}[t-3 \dots t]) \ge 0.75 \quad \text{AND} \quad \text{mean}(\text{accuracy}[t+1 \dots t+3]) \le 0.50$$
-* **Causal Separation**: Features use data strictly from $0 \dots t$. Future observations ($t+1 \dots t+3$) are used **exclusively** to construct the target label $y$ for supervised training.
-
----
-
-## Predictive Models & Baselines
-
-1. **CLSI-Adapt**: Profile-specific XGBoost classifiers trained with scale-position-weight balancing and 5-fold temporal forward-chaining cross-validation (`TimeSeriesSplit`). Inner CV grid search optimizes hyperparameters (`max_depth` $\in \{3,5,7\}$, `learning_rate` $\in \{0.01, 0.1\}$).
-2. **Rule-Based CLSI**: Parameter-free composite heuristic index:
-   $$\text{CLSI} = \frac{0.50 \cdot \text{acc} + 0.25 \cdot (1 - \text{NRT}) + 0.15 \cdot (1 - \text{wer}) + 0.10 \cdot (1 - \text{retries-norm})}{1.0} - 0.10 \cdot \text{help-requested}$$
-   Predicts overload when $\text{CLSI} < 0.40$.
-3. **BKT Baseline**: Standard Bayesian Knowledge Tracing ($P(L_0)=0.3, P(T)=0.1, P(G)=0.2, P(S)=0.1$, reset per learner). Predicts struggle when mastery $P(L_t) < 0.30$.
-
----
-
-## Temporal Cross-Validation Methodology
-
-To prevent data leakage across temporal sequences:
-* `TimeSeriesSplit(n_splits=5)` is applied across unique interaction time steps.
-* Strict temporal forward-chaining invariant:
-  $$\max(\text{train-pos}) < \min(\text{val-pos}) \quad \text{and} \quad \text{train-times} \cap \text{val-times} = \emptyset$$
-* All learners at a given interaction time step are assigned to the same temporal partition, eliminating simultaneous-time leakage.
-
----
-
-## Performance Summary (Common Out-of-Fold Subset)
-
-| Model | Evaluated Profiles | Mean ROC AUC | Mean Precision | Mean Recall | Mean F1 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **CLSI-Adapt** | 3 valid profiles | **0.9694 ± 0.0049** | **0.3490 ± 0.2025** | **0.6643 ± 0.3874** | **0.4563 ± 0.2637** |
-| **Rule-Based CLSI** | 4 valid profiles | 0.1062 ± 0.0132 | 0.0055 ± 0.0059 | 0.1473 ± 0.1230 | 0.0105 ± 0.0111 |
-| **BKT (struggle proxy)** | 4 valid profiles | 0.0478 ± 0.0249 | 0.0000 ± 0.0000 | 0.0000 ± 0.0000 | 0.0000 ± 0.0000 |
-
-* **Single-Class Target Handling**: Single-class profiles (`fast_inaccurate` and `slow_inaccurate`) return mathematically undefined `AUC = NaN`. These are preserved as `NaN` and excluded from aggregate means while reporting contributing profile counts.
-
----
-
-## Reproducibility Instructions
-
-### Environment Setup
 ```bash
-# Clone repository
-git clone https://github.com/gtathelegend/CLSI-Adapt-Simulator.git
-cd CLSI-Adapt-Simulator
-
-# Create and activate virtual environment
-python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On macOS/Linux:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Run complete test suite
+python -m pytest -q
+# 631 passed, 5 skipped
 ```
 
-### Running the End-to-End Pipeline
-```bash
-python run_all.py
-```
-This executes the full pipeline under `seed = 42`:
-`Simulation -> Feature Engineering -> Model Fitting -> Evaluation -> Table Export -> Figure Generation`.
-
-### Running Unit Tests
-```bash
-python -m pytest
-```
-Expected output: **179 passed, 5 skipped** (100% clean test suite pass).
+Test breakdown:
+- Core simulator & dynamics: 236 tests
+- Presets (education, mobile, healthcare, finance): 112 tests
+- Calibration & clustering: 102 tests
+- Causal feature engineering: 33 tests
+- Visualization & diagnostics: 48 tests
+- Legacy benchmark evaluation: 100 tests
 
 ---
 
-## Scientific Limitations
+## Limitations
 
-1. **Synthetic Simulation**: Trajectories are generated via Hidden Markov Models with log-normal response times. Results provide a controlled benchmark but do not replace human-subject clinical validation.
-2. **Simulator Ground Truth**: Overload labels reflect simulator state transition definitions.
-3. **Profile-Level Model Pooling**: Models are trained per profile; cross-profile generalization is not evaluated.
-4. **Rare Overload Targets**: Highly inaccurate profiles feature near-zero overload transitions, resulting in undefined `AUC = NaN`.
-5. **Baseline Proxy Alignment**: BKT measures domain mastery rather than direct cognitive load, confirming that struggle proxies alone are insufficient for load detection.
-6. **Observational Recovery**: Recovery interval statistics measure elapsed time following model detection to the next optimal state; they do not represent causal intervention efficacy.
+1. **Synthetic vs. Real Behavior**: Synthetic data generates trajectories consistent with configured distributions and transition rules. It does not automatically capture unmodeled real-world confounding or non-stationary drift.
+2. **Proxy Calibration**: Calibration reflects the observable proxies supplied by the user; it does not infer hidden latent intent without explicit proxy definitions.
+3. **No Clinical or Financial Advice**: Healthcare and financial presets are academic benchmarks and must not be used for medical or financial decision-making.
 
 ---
 
-## Publication Artifacts
+## Historical Context & Citation
 
-All final audited artifacts are available in `results/`:
-* **Tables**: [`results/tables/profile_metrics.csv`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/tables/profile_metrics.csv), [`aggregate_metrics.csv`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/tables/aggregate_metrics.csv), [`recovery_metrics.csv`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/tables/recovery_metrics.csv), [`state_statistics.csv`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/tables/state_statistics.csv) (and `.tex` equivalents).
-* **Figures**: [`results/figures/figure1_architecture.pdf`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/figures/figure1_architecture.pdf), [`figure2_roc_curves.pdf`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/figures/figure2_roc_curves.pdf), [`figure3_shap_summary.pdf`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/figures/figure3_shap_summary.pdf), [`figure4_learning_curve.pdf`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/figures/figure4_learning_curve.pdf), [`figure5_model_comparison.pdf`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/results/figures/figure5_model_comparison.pdf).
-* **Audit Logs**: `results/clsi_adapt_phase4_results.txt`, `results/evaluation_phase5_audit.txt`, `results/figure4_learning_curve_audit.txt`, `results/final_reproducibility_audit.txt`.
+BehaviorSim evolved from the **CLSI-Adapt** research framework for cognitive load state identification under temporal validation.
 
----
+If you use BehaviorSim in academic research, please cite:
 
-## Citation & Licensing
+```bibtex
+@software{behaviorsim2026,
+  title = {BehaviorSim: Synthetic Sequential Behavioral Data Generation Library},
+  author = {CLSI-ADAPT Team},
+  year = {2026},
+  url = {https://github.com/gtathelegend/BehaviourSim}
+}
+```
 
-If you use this codebase or benchmark in your research, please cite using [`CITATION.cff`](file:///c:/Users/vedaa/OneDrive/Documents/CLSI-ADAPT/CLSI-Adapt-Simulator/CITATION.cff).
+## License
 
-*License*: Formal open-source licensing selection is pending decision by the repository owner.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
