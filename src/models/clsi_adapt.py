@@ -90,6 +90,15 @@ import numpy as np
 import pandas as pd
 import shap
 import xgboost as xgb
+
+# Compatibility shim: scikit-learn >= 1.6 removed _estimator_type from
+# ClassifierMixin/RegressorMixin, which causes TypeError in xgboost < 3.0
+# when calling save_model() or check_is_fitted().
+if hasattr(xgb, "XGBClassifier") and not hasattr(xgb.XGBClassifier, "_estimator_type"):
+    xgb.XGBClassifier._estimator_type = "classifier"
+if hasattr(xgb, "XGBRegressor") and not hasattr(xgb.XGBRegressor, "_estimator_type"):
+    xgb.XGBRegressor._estimator_type = "regressor"
+
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import roc_auc_score
 

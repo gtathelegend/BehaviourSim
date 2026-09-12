@@ -601,6 +601,8 @@ class TestSmallDatasetTraining(unittest.TestCase):
     def test_model_save_and_reload(self) -> None:
         """Final model can be saved to JSON and reloaded with identical predictions."""
         import xgboost as xgb
+        if not hasattr(xgb.XGBClassifier, "_estimator_type"):
+            xgb.XGBClassifier._estimator_type = "classifier"
         df = _make_minimal_df(n=80, seed=124)
         X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         model, X_out, _ = _tfm(X_elig, y_elig)
