@@ -29,6 +29,12 @@ dependencies = [
     "pyyaml>=6.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/gtathelegend/BehaviourSim"
+Repository = "https://github.com/gtathelegend/BehaviourSim"
+Issues = "https://github.com/gtathelegend/BehaviourSim/issues"
+Changelog = "https://github.com/gtathelegend/BehaviourSim/releases"
+
 [project.optional-dependencies]
 parquet = [
     "pyarrow>=10.0.0",
