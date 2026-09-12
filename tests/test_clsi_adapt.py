@@ -603,6 +603,8 @@ class TestSmallDatasetTraining(unittest.TestCase):
         import xgboost as xgb
         if not hasattr(xgb.XGBClassifier, "_estimator_type"):
             xgb.XGBClassifier._estimator_type = "classifier"
+        if not hasattr(xgb.XGBModel, "_estimator_type"):
+            xgb.XGBModel._estimator_type = "classifier"
         df = _make_minimal_df(n=80, seed=124)
         X_elig, y_elig, _, _, _ = _prepare_profile_data(df)
         model, X_out, _ = _tfm(X_elig, y_elig)

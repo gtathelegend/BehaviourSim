@@ -98,6 +98,8 @@ if hasattr(xgb, "XGBClassifier") and not hasattr(xgb.XGBClassifier, "_estimator_
     xgb.XGBClassifier._estimator_type = "classifier"
 if hasattr(xgb, "XGBRegressor") and not hasattr(xgb.XGBRegressor, "_estimator_type"):
     xgb.XGBRegressor._estimator_type = "regressor"
+if hasattr(xgb, "XGBModel") and not hasattr(xgb.XGBModel, "_estimator_type"):
+    xgb.XGBModel._estimator_type = "classifier"
 
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import roc_auc_score
