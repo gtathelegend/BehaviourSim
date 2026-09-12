@@ -34,7 +34,7 @@ from behaviorsim import (
 def test_public_package_exports() -> None:
     """Verify primary public API symbols and version are exposed directly from behaviorsim."""
     assert isinstance(__version__, str)
-    assert __version__ == "1.0.0"
+    assert __version__ == "1.0.1"
 
     assert Simulator is behaviorsim.core.simulator.Simulator
     assert State is behaviorsim.core.state.State

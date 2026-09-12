@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [
-    { name = "CLSI-ADAPT Team" }
+    { name = "Vedaang Sharma" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -28,6 +28,12 @@ dependencies = [
     "scipy>=1.10.0",
     "pyyaml>=6.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gtathelegend/BehaviourSim"
+Repository = "https://github.com/gtathelegend/BehaviourSim"
+Issues = "https://github.com/gtathelegend/BehaviourSim/issues"
+Changelog = "https://github.com/gtathelegend/BehaviourSim/releases"
 
 [project.optional-dependencies]
 parquet = [

@@ -1,7 +1,7 @@
 # BehaviorSim: Synthetic Sequential Behavioral Data Generation
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/pytest-631%20passed-success.svg)](https://docs.pytest.org/)
+[![Tests](https://img.shields.io/badge/pytest-634%20passed-success.svg)](https://docs.pytest.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Reproducibility](https://img.shields.io/badge/reproducible-deterministic%20seeds-brightgreen.svg)](#reproducibility)
 
@@ -44,15 +44,26 @@ BehaviorSim provides:
 
 ### Standard Installation
 ```bash
-pip install -e .
+pip install behaviorsim
 ```
 
-### With Optional Parquet Support
+### With Optional Dependencies
 ```bash
-pip install -e ".[parquet]"
+# Fast Parquet storage
+pip install "behaviorsim[parquet]"
+
+# Visualization layer
+pip install "behaviorsim[viz]"
+
+# Calibration & validation
+pip install "behaviorsim[calibration]"
+
+# All optional features
+pip install "behaviorsim[all]"
 ```
 
-### Development Dependencies
+### Development / Repository Installation
+For local development from a cloned repository:
 ```bash
 pip install -e ".[dev]"
 ```
@@ -287,12 +298,12 @@ BehaviorSim guarantees **exact cross-platform reproducibility**:
 
 ## Testing Status
 
-The BehaviorSim test suite includes **631 passing tests** with 100% clean diff audits across all subsystems:
+The BehaviorSim test suite includes **634 passing tests** with 100% clean diff audits across all subsystems:
 
 ```bash
 # Run complete test suite
 python -m pytest -q
-# 631 passed, 5 skipped
+# 634 passed, 5 skipped
 ```
 
 Test breakdown:
@@ -322,11 +333,15 @@ If you use BehaviorSim in academic research, please cite:
 ```bibtex
 @software{behaviorsim2026,
   title = {BehaviorSim: Synthetic Sequential Behavioral Data Generation Library},
-  author = {CLSI-ADAPT Team},
+  author = {Vedaang Sharma},
   year = {2026},
   url = {https://github.com/gtathelegend/BehaviourSim}
 }
 ```
+
+## Credits
+
+**Author:** Vedaang Sharma
 
 ## License
 
