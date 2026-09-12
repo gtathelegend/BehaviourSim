@@ -214,3 +214,30 @@ class TestFigureExport:
         with pytest.raises(ValueError, match="must include a file extension"):
             save_figure(fig, tmp_path / "no_extension")
         plt.close(fig)
+
+    def test_save_figure_tuple_support(self, tmp_path: Path):
+        """Verify save_figure directly accepts (fig, ax) tuple returned by plotting functions."""
+        fig, ax = plt.subplots()
+        ax.plot([1, 2], [3, 4])
+        tuple_input = (fig, ax)
+
+        # PNG via tuple with close=False
+        png_out = tmp_path / "tuple_plot.png"
+        saved_png = save_figure(tuple_input, png_out, close=False)
+        assert saved_png.exists()
+        assert saved_png.stat().st_size > 0
+        assert plt.fignum_exists(fig.number)
+
+        # PDF via tuple with close=False
+        pdf_out = tmp_path / "tuple_plot.pdf"
+        saved_pdf = save_figure(tuple_input, pdf_out, close=False)
+        assert saved_pdf.exists()
+        assert saved_pdf.stat().st_size > 0
+        assert plt.fignum_exists(fig.number)
+
+        # SVG via tuple with close=True
+        svg_out = tmp_path / "tuple_plot.svg"
+        saved_svg = save_figure(tuple_input, svg_out, close=True)
+        assert saved_svg.exists()
+        assert saved_svg.stat().st_size > 0
+        assert not plt.fignum_exists(fig.number)

@@ -39,7 +39,7 @@ from behaviorsim.visualization.plot_calibration import (
 
 
 def save_figure(
-    fig: Figure,
+    fig: Union[Figure, Tuple[Figure, Any]],
     path: Union[str, Path],
     dpi: int = 300,
     bbox_inches: str = "tight",
@@ -54,8 +54,8 @@ def save_figure(
 
     Parameters
     ----------
-    fig : Figure
-        Matplotlib Figure to save.
+    fig : Figure or Tuple[Figure, Any]
+        Matplotlib Figure (or (fig, ax) tuple returned by plotting functions) to save.
     path : Union[str, Path]
         Target file path with extension (e.g. '.png', '.pdf', '.svg').
     dpi : int, default 300
@@ -72,7 +72,11 @@ def save_figure(
     Path
         Path to the saved figure file.
     """
-    if not isinstance(fig, Figure):
+    if isinstance(fig, tuple) and len(fig) > 0 and isinstance(fig[0], Figure):
+        actual_fig = fig[0]
+    elif isinstance(fig, Figure):
+        actual_fig = fig
+    else:
         raise TypeError(f"Expected matplotlib Figure, got {type(fig).__name__}.")
 
     target_path = Path(path)
@@ -82,10 +86,10 @@ def save_figure(
         )
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(str(target_path), dpi=dpi, bbox_inches=bbox_inches, **kwargs)
+    actual_fig.savefig(str(target_path), dpi=dpi, bbox_inches=bbox_inches, **kwargs)
 
     if close:
-        plt.close(fig)
+        plt.close(actual_fig)
 
     return target_path
 

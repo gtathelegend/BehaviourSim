@@ -419,3 +419,16 @@ def test_simulation_input_validation(generic_states: list[State], generic_profil
     assert list(df_zero_seq.columns) == ["profile", "sequence_id", "interaction_id", "state", "signal", "latency"]
 
 
+def test_simulator_transition_matrix_defensive_isolation(generic_states: list[State], generic_profile: Profile) -> None:
+    """Verify that Simulator's internal transition matrices are isolated from Profile mutation after construction."""
+    sim = Simulator(states=generic_states, profile=generic_profile)
+    assert generic_profile.transition_matrix is not None
+    original_val = float(generic_profile.transition_matrix[0, 0])
+
+    # Mutate the profile's transition matrix array
+    generic_profile.transition_matrix[0, 0] = 0.0
+    generic_profile.transition_matrix[0, 1] = 1.0
+
+    # Simulator internal matrix must remain unaffected
+    internal_matrix = sim._profile_matrices[generic_profile.name]
+    assert internal_matrix[0, 0] == original_val

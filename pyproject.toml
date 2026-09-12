@@ -33,6 +33,13 @@ dependencies = [
 parquet = [
     "pyarrow>=10.0.0",
 ]
+viz = [
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+]
+calibration = [
+    "scikit-learn>=1.2.0",
+]
 dev = [
     "pytest>=7.0.0",
     "scikit-learn>=1.2.0",
@@ -40,6 +47,13 @@ dev = [
     "shap>=0.44.0",
     "matplotlib>=3.7.0",
     "seaborn>=0.12.0",
+    "build>=1.0.0",
+]
+all = [
+    "pyarrow>=10.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "scikit-learn>=1.2.0",
 ]
 
 [project.scripts]

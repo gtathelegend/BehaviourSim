@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master", "behaviorsim" ]
+  pull_request:
+    branches: [ "main", "master", "behaviorsim" ]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install package and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,all]"
+
+      - name: Run test suite
+        run: |
+          python -m pytest -q
+
+      - name: Build package distribution
+        run: |
+          python -m build
+
+      - name: Verify build artifacts
+        run: |
+          python -c "import glob, sys; sys.exit(0 if glob.glob('dist/*.whl') and glob.glob('dist/*.tar.gz') else 1)"

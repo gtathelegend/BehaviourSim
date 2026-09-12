@@ -201,3 +201,21 @@ def test_profile_domain_neutrality() -> None:
     )
     assert "Suspicious" in finance_profile.state_emissions
     assert finance_profile.state_emissions["Suspicious"]["is_international"].params["p"] == 0.80
+
+
+def test_profile_transition_matrix_defensive_copying() -> None:
+    """Verify that Profile defensively copies the input transition matrix to prevent external mutation leaks."""
+    mat = np.array([[0.7, 0.3], [0.2, 0.8]])
+    profile = Profile(
+        name="defensive_test",
+        state_emissions={
+            "A": {"x": FeatureDistribution("constant", {"value": 1.0})},
+            "B": {"x": FeatureDistribution("constant", {"value": 2.0})},
+        },
+        transition_matrix=mat,
+    )
+    assert profile.transition_matrix is not mat
+    mat[0, 0] = 0.0
+    mat[0, 1] = 1.0
+    assert profile.transition_matrix[0, 0] == 0.7
+    assert profile.transition_matrix[0, 1] == 0.3

@@ -13,8 +13,6 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 
-from src.config import Config, default_config
-
 from behaviorsim.core.feature import FeatureDistribution
 from behaviorsim.core.profile import Profile
 from behaviorsim.core.state import State
@@ -304,12 +302,32 @@ def create_education_simulator(
     )
 
 
+def _get_default_config() -> Any:
+    """Retrieve default configuration if src.config is available, otherwise a minimal dummy config."""
+    try:
+        from src.config import default_config  # type: ignore
+        return default_config
+    except ImportError:
+        from dataclasses import make_dataclass
+        DummyConfig = make_dataclass(
+            "DummyConfig",
+            [
+                ("num_interactions_per_learner", int, 1000),
+                ("num_learners_per_profile", int, 10),
+                ("seed", int, 42),
+                ("feature_window_size", int, 5),
+                ("data_dir", Path, Path("data")),
+            ],
+        )
+        return DummyConfig()
+
+
 def simulate_learner(
     profile_name: str,
     num_interactions: Optional[int] = None,
     learner_id: int = 1,
     seed: Optional[int] = None,
-    config: Config = default_config,
+    config: Optional[Any] = None,
 ) -> pd.DataFrame:
     """Simulate interaction log for a single independent synthetic learner via core Simulator.
 
@@ -328,10 +346,11 @@ def simulate_learner(
             f"Unknown profile '{profile_name}'. Must be one of {list(LEARNER_PROFILES.keys())}"
         )
 
-    n_interactions = num_interactions if num_interactions is not None else config.num_interactions_per_learner
+    cfg = config if config is not None else _get_default_config()
+    n_interactions = num_interactions if num_interactions is not None else cfg.num_interactions_per_learner
     learner_profile = LEARNER_PROFILES[profile_name]
-    effective_seed = seed if seed is not None else config.seed
-    window_size = config.feature_window_size
+    effective_seed = seed if seed is not None else cfg.seed
+    window_size = cfg.feature_window_size
 
     simulator = create_education_simulator(profile=learner_profile, initial_state="Optimal")
 
@@ -412,7 +431,7 @@ def simulate_all_profiles(
     num_interactions: Optional[int] = None,
     num_learners: Optional[int] = None,
     seed: int = 42,
-    config: Config = default_config,
+    config: Optional[Any] = None,
 ) -> Dict[str, pd.DataFrame]:
     """Simulate interaction datasets for all registered learner profiles across multiple independent learners.
 
@@ -425,8 +444,9 @@ def simulate_all_profiles(
     Returns:
         Dictionary mapping profile_name to its concatenated multi-learner DataFrame.
     """
-    n_interactions = num_interactions if num_interactions is not None else config.num_interactions_per_learner
-    n_learners = num_learners if num_learners is not None else config.num_learners_per_profile
+    cfg = config if config is not None else _get_default_config()
+    n_interactions = num_interactions if num_interactions is not None else cfg.num_interactions_per_learner
+    n_learners = num_learners if num_learners is not None else cfg.num_learners_per_profile
 
     results: Dict[str, pd.DataFrame] = {}
     for p_idx, profile_name in enumerate(LEARNER_PROFILES.keys()):
@@ -438,7 +458,7 @@ def simulate_all_profiles(
                 num_interactions=n_interactions,
                 learner_id=l_idx,
                 seed=learner_seed,
-                config=config,
+                config=cfg,
             )
             learner_dfs.append(df_learner)
 
@@ -449,7 +469,7 @@ def simulate_all_profiles(
 def save_simulation(
     simulation_results: Dict[str, pd.DataFrame],
     output_dir: Optional[Path] = None,
-    config: Config = default_config,
+    config: Optional[Any] = None,
 ) -> List[Path]:
     """Save simulation DataFrames to CSV files in output_dir.
 
@@ -461,7 +481,8 @@ def save_simulation(
     Returns:
         List of saved CSV file paths.
     """
-    target_dir = output_dir if output_dir is not None else config.data_dir
+    cfg = config if config is not None else _get_default_config()
+    target_dir = output_dir if output_dir is not None else getattr(cfg, "data_dir", Path("data"))
     target_dir.mkdir(parents=True, exist_ok=True)
 
     saved_paths: List[Path] = []
@@ -493,7 +514,13 @@ def validate_simulation_diagnostics(
     Returns:
         Dict with keys 'profile_summary' and 'learner_summary' DataFrames.
     """
-    from src.feature_engineering import build_overload_target
+    try:
+        from src.feature_engineering import build_overload_target  # type: ignore
+    except ImportError:
+        raise ImportError(
+            "validate_simulation_diagnostics requires the legacy CLSI-Adapt 'src' package. "
+            "Please ensure 'src' is accessible on sys.path to run this diagnostic."
+        )
 
     profile_rows: List[Dict[str, Any]] = []
     learner_rows: List[Dict[str, Any]] = []
@@ -556,7 +583,7 @@ def validate_simulation_diagnostics(
     }
 
 
-def run_simulation(config: Config = default_config) -> Dict[str, pd.DataFrame]:
+def run_simulation(config: Optional[Any] = None) -> Dict[str, pd.DataFrame]:
     """Run full simulation pipeline step and save outputs.
 
     Args:
@@ -565,11 +592,12 @@ def run_simulation(config: Config = default_config) -> Dict[str, pd.DataFrame]:
     Returns:
         Dictionary of simulated DataFrames for all profiles.
     """
+    cfg = config if config is not None else _get_default_config()
     results = simulate_all_profiles(
-        num_interactions=config.num_interactions_per_learner,
-        num_learners=config.num_learners_per_profile,
-        seed=config.seed,
-        config=config,
+        num_interactions=cfg.num_interactions_per_learner,
+        num_learners=cfg.num_learners_per_profile,
+        seed=cfg.seed,
+        config=cfg,
     )
-    save_simulation(results, output_dir=config.data_dir, config=config)
+    save_simulation(results, output_dir=getattr(cfg, "data_dir", Path("data")), config=cfg)
     return results
