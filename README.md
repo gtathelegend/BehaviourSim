@@ -333,11 +333,15 @@ If you use BehaviorSim in academic research, please cite:
 ```bibtex
 @software{behaviorsim2026,
   title = {BehaviorSim: Synthetic Sequential Behavioral Data Generation Library},
-  author = {CLSI-ADAPT Team},
+  author = {Vedaang Sharma},
   year = {2026},
   url = {https://github.com/gtathelegend/BehaviourSim}
 }
 ```
+
+## Credits
+
+**Author:** Vedaang Sharma
 
 ## License
 
