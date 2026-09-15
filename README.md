@@ -30,9 +30,7 @@ The **Python package** can be installed and executed locally for programmatic co
 | 🌐 **Web Platform** | [behavioursim.vedaangsharma.in](https://behavioursim.vedaangsharma.in/) | Interactive browser-based simulation playground, preset explorer, and usage dashboard |
 | 🔌 **Production API** | [api.behavioursim.vedaangsharma.in](https://api.behavioursim.vedaangsharma.in/) | Hosted REST API for remote simulation submission, quota management, and data retrieval |
 | 📦 **PyPI Package** | [pypi.org/project/behaviorsim/](https://pypi.org/project/behaviorsim/) | Published Python distribution (`pip install behaviorsim`) |
-| 💻 **Core Repository** | [github.com/gtathelegend/BehaviourSim](https://github.com/gtathelegend/BehaviourSim) | Python simulation engine, calibration routines, causal features, CLI, and test suite |
-| ⚙️ **API Repository** | [github.com/gtathelegend/BehaviourSim-API](https://github.com/gtathelegend/BehaviourSim-API) | FastAPI application, worker orchestration, PostgreSQL persistence, and quota management |
-| 🎨 **Web Repository** | [github.com/gtathelegend/BehaviourSim-Web](https://github.com/gtathelegend/BehaviourSim-Web) | Next.js/React frontend application, interactive playground, and account management UI |
+| 💻 **GitHub Repository** | [github.com/gtathelegend/BehaviourSim](https://github.com/gtathelegend/BehaviourSim) | Python simulation engine, calibration routines, causal features, CLI, and test suite |
 
 ---
 
@@ -51,14 +49,12 @@ The hosted REST API exposes BehaviourSim over HTTP for remote execution and serv
 - **Capabilities**: Authenticated access, asynchronous simulation submission, durable background execution, real-time job status tracking, simulation history, result retrieval, quota reservation, per-minute rate limiting, and system diagnostics.
 - **Use it when you want**: To invoke simulations from non-Python applications, run remote workloads without managing compute environments, or automate telemetry generation in CI/CD and data services.
 - **Base URL**: `https://api.behavioursim.vedaangsharma.in`
-- **Repository**: [github.com/gtathelegend/BehaviourSim-API](https://github.com/gtathelegend/BehaviourSim-API)
 
 ### 🌐 Web Platform
 The hosted Web platform provides an intuitive, browser-based user interface for BehaviourSim.
 - **Capabilities**: Interactive playground, domain preset selection, graphical parameter configuration (interactions, random seed, behavioral profiles), OAuth-based authentication, account and usage dashboards, telemetry inspection, and API key generation.
 - **Use it when you want**: Rapid scenario exploration, visual telemetry analysis, demonstration, or evaluation without writing code or making direct API calls.
 - **Production URL**: [https://behavioursim.vedaangsharma.in](https://behavioursim.vedaangsharma.in/)
-- **Repository**: [github.com/gtathelegend/BehaviourSim-Web](https://github.com/gtathelegend/BehaviourSim-Web)
 
 ---
 
@@ -620,23 +616,6 @@ python -m pytest -q
 1. **Synthetic vs. Real Behavior**: Synthetic data generates trajectories consistent with configured distributions and transition rules. It does not automatically capture unmodeled real-world confounding or non-stationary drift.
 2. **Proxy Calibration**: Calibration reflects observable proxies supplied by the user; it does not infer hidden latent intent without explicit proxy definitions.
 3. **No Clinical or Financial Advice**: Healthcare and financial presets are academic benchmarks and must not be used for medical diagnosis, patient care, or financial decision-making.
-
----
-
-## Repository Structure & Relationships
-
-The BehaviourSim ecosystem is maintained across three dedicated public repositories:
-
-```text
-BehaviourSim Ecosystem
-├── BehaviourSim       (Core simulation engine, calibration, causal features, CLI, & PyPI package)
-├── BehaviourSim-API   (Hosted REST API, worker queue, PostgreSQL persistence, auth, & quotas)
-└── BehaviourSim-Web   (Next.js web application, interactive playground, & usage dashboard)
-```
-
-- **BehaviourSim (Core)**: The canonical technical landing page and home of the mathematical simulation engine, published to PyPI as `behaviorsim`.
-- **BehaviourSim-API**: Backend service wrapping the core engine in a scalable FastAPI application with worker orchestration, PostgreSQL storage, and API key management.
-- **BehaviourSim-Web**: Modern Next.js frontend offering interactive playgrounds, telemetry visualization, and self-service account management.
 
 ---
 
